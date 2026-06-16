@@ -3,6 +3,7 @@ export const mockTeamSprintPlanningConfigs = {
     teamKey: "pta",
     teamName: "PTA",
     jira: {
+      projectName: "PTA",
       projectKey: "PTATPA",
       boardName: "PTA Sprint Board"
     },
@@ -11,7 +12,8 @@ export const mockTeamSprintPlanningConfigs = {
     },
     defaults: {
       teamMemberCount: 5,
-      daysInSprintExcludingHolidays: 10
+      daysInSprintExcludingHolidays: 10,
+      sprintNamingPattern: "Q{quarter}S{sprint} - {year}"
     }
   }
 };

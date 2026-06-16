@@ -8,6 +8,22 @@ function roundVelocity(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+function getManualVelocityOverride(form: PlanningForm) {
+  if (form.manualVelocityPerDeveloperOverride.trim() === "") {
+    return {
+      perDeveloper: null,
+      total: null
+    };
+  }
+
+  const perDeveloper = toNumber(form.manualVelocityPerDeveloperOverride);
+
+  return {
+    perDeveloper,
+    total: roundVelocity(perDeveloper * form.teamMemberCount)
+  };
+}
+
 export function calculatePlanning(form: PlanningForm) {
   const averageNetVelocity = roundVelocity(
     (form.previousVelocityMinus3 + form.previousVelocityMinus2 + form.lastNetVelocity) / 3
@@ -19,7 +35,7 @@ export function calculatePlanning(form: PlanningForm) {
   const confidenceAdjustedVelocity = roundVelocity(
     capacityAdjustedVelocity * (1 + form.confidenceAdjustment / 100)
   );
-  const override = form.manualVelocityOverride.trim() === "" ? null : toNumber(form.manualVelocityOverride);
+  const override = getManualVelocityOverride(form);
 
   return {
     averageNetVelocity,
@@ -27,12 +43,16 @@ export function calculatePlanning(form: PlanningForm) {
     availableCapacityDays,
     capacityAdjustedVelocity,
     confidenceAdjustedVelocity,
-    sprintVelocity: roundVelocity(override ?? confidenceAdjustedVelocity),
-    velocitySource: override == null ? "System suggestion" : "Team override"
+    manualVelocityOverrideTotal: override.total,
+    manualVelocityPerDeveloperOverride: override.perDeveloper,
+    sprintVelocity: roundVelocity(override.total ?? confidenceAdjustedVelocity),
+    velocitySource: override.total == null ? "System suggestion" : "Team override"
   };
 }
 
 export function toSprintPlanningInput(form: PlanningForm): SprintPlanningInput {
+  const override = getManualVelocityOverride(form);
+
   return {
     teamKey: form.teamKey,
     teamName: form.teamName,
@@ -58,8 +78,7 @@ export function toSprintPlanningInput(form: PlanningForm): SprintPlanningInput {
     previousSprintLeaveDays: form.previousSprintLeaveDays,
     upcomingSprintLeaveDays: form.upcomingSprintLeaveDays,
     confidenceAdjustment: form.confidenceAdjustment,
-    manualVelocityOverride:
-      form.manualVelocityOverride.trim() === "" ? null : toNumber(form.manualVelocityOverride),
+    manualVelocityOverride: override.total,
     velocityOverrideReason: form.velocityOverrideReason
   };
 }

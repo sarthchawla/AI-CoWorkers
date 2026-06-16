@@ -1,9 +1,11 @@
 export type PlanningForm = {
   teamKey: string;
   teamName: string;
+  jiraProjectName: string;
   jiraProjectKey: string;
   jiraBoardName: string;
   slackChannel: string;
+  sprintNamingPattern: string;
   previousSprintName: string;
   currentSprintName: string;
   previousSprintStart: string;
@@ -19,7 +21,7 @@ export type PlanningForm = {
   previousSprintLeaveDays: number;
   upcomingSprintLeaveDays: number;
   confidenceAdjustment: number;
-  manualVelocityOverride: string;
+  manualVelocityPerDeveloperOverride: string;
   velocityOverrideReason: string;
 };
 
@@ -100,6 +102,7 @@ export type TeamSprintPlanningConfig = {
   teamKey: string;
   teamName: string;
   jira: {
+    projectName?: string;
     projectKey: string;
     boardName: string;
     boardId?: string;
@@ -111,6 +114,7 @@ export type TeamSprintPlanningConfig = {
   defaults: {
     teamMemberCount: number;
     daysInSprintExcludingHolidays: number;
+    sprintNamingPattern?: string;
   };
 };
 
@@ -184,11 +188,25 @@ export type PlanningResult = {
   availableCapacityDays: number;
   capacityAdjustedVelocity: number;
   confidenceAdjustedVelocity: number;
+  manualVelocityOverrideTotal: number | null;
+  manualVelocityPerDeveloperOverride: number | null;
   sprintVelocity: number;
   velocitySource: string;
 };
 
 export type PlanningStatus = "draft" | "ready_for_review" | "finalized" | "published";
+
+export type WorkflowStepId =
+  | "clone"
+  | "calendar"
+  | "velocity-baseline"
+  | "slack-leaves"
+  | "jira-close"
+  | "jira-reporting"
+  | "velocity-decision"
+  | "finalize";
+
+export type WorkflowStepState = "current" | "completed" | "available" | "locked";
 
 export type SprintPlanningConnectorActionKey =
   | "collect-leaves"
@@ -250,4 +268,12 @@ export type SprintPlanningConnectorActionResponse = {
     session: SavedSprintPlanningSession;
     action: SprintPlanningConnectorActionResult;
   };
+};
+
+export type ScrumMasterStatusResponse = {
+  id: string;
+  name: string;
+  focus: string;
+  sprintPlanningConnectorMode: string;
+  ceremonies: string[];
 };

@@ -3,6 +3,7 @@ import type {
   JiraReportingImportResponse,
   LeaveConfirmationRow,
   PlanningStatus,
+  ScrumMasterStatusResponse,
   SavedSprintPlanningSessionResponse,
   SavedSprintPlanningSessionsResponse,
   SlackLeaveConfirmationImportResponse,
@@ -13,6 +14,17 @@ import type {
   TeamSprintPlanningConfig,
   VelocityHistoryRow
 } from "./sprintPlanningTypes";
+
+export async function getScrumMasterStatus() {
+  const response = await fetch("/api/coworkers/scrum-master");
+  const payload = (await response.json()) as ScrumMasterStatusResponse;
+
+  if (!response.ok) {
+    throw new Error("Scrum Master status load failed");
+  }
+
+  return payload;
+}
 
 export async function getSprintPlanningTeamConfig(teamKey: string) {
   const response = await fetch(`/api/coworkers/scrum-master/sprint-planning/team-config/${teamKey}`);

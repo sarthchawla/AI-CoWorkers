@@ -2,6 +2,7 @@ CREATE TABLE sprint_planning_team_configs (
   team_config_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   team_key TEXT NOT NULL UNIQUE,
   team_name TEXT NOT NULL,
+  jira_project_name TEXT,
   jira_project_key TEXT NOT NULL,
   jira_board_name TEXT NOT NULL,
   jira_board_id TEXT,
@@ -9,6 +10,7 @@ CREATE TABLE sprint_planning_team_configs (
   slack_channel_id TEXT,
   default_team_member_count BIGINT NOT NULL CHECK (default_team_member_count > 0),
   default_days_in_sprint_excluding_holidays BIGINT NOT NULL CHECK (default_days_in_sprint_excluding_holidays > 0),
+  sprint_naming_pattern TEXT NOT NULL DEFAULT 'Q{quarter}S{sprint} - {year}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

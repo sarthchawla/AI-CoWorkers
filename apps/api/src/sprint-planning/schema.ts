@@ -4,6 +4,7 @@ export const teamSprintPlanningConfigSchema = z.object({
   teamKey: z.string().min(1),
   teamName: z.string().min(1),
   jira: z.object({
+    projectName: z.string().optional(),
     projectKey: z.string().min(1),
     boardName: z.string().min(1),
     boardId: z.string().optional()
@@ -14,7 +15,8 @@ export const teamSprintPlanningConfigSchema = z.object({
   }),
   defaults: z.object({
     teamMemberCount: z.number().positive(),
-    daysInSprintExcludingHolidays: z.number().positive()
+    daysInSprintExcludingHolidays: z.number().positive(),
+    sprintNamingPattern: z.string().min(1).optional()
   })
 });
 

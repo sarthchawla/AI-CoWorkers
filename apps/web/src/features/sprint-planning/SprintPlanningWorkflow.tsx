@@ -1,18 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { HTMLAttributes } from "react";
+import * as Tabs from "@radix-ui/react-tabs";
 import type { LucideIcon } from "lucide-react";
 import {
-  ArrowRight,
   Bot,
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   Copy,
-  FileText,
   FolderOpen,
   Goal,
+  History,
   ListChecks,
   MessageSquare,
+  Plus,
   Save as SaveIcon,
   Settings2,
   Sparkles,
@@ -23,6 +24,7 @@ import {
   createSprintPlanningWorkflowDraft,
   getSprintPlanningSession,
   getJiraVelocityHistory,
+  getScrumMasterStatus,
   getSlackLeaveConfirmations,
   getSprintPlanningTeamConfig,
   listSprintPlanningSessions,
@@ -37,19 +39,24 @@ import type {
   LeaveConfirmationRow,
   PlanningStatus,
   PlanningForm,
+  ScrumMasterStatusResponse,
   SavedSprintPlanningSession,
   SavedSprintPlanningSessionSummary,
   SprintPlanningConnectorActionKey,
   SprintPlanningInput,
-  VelocityHistoryRow
+  VelocityHistoryRow,
+  WorkflowStepId,
+  WorkflowStepState
 } from "./sprintPlanningTypes";
 
 const initialForm: PlanningForm = {
   teamKey: "pta",
   teamName: "PTA",
+  jiraProjectName: "PTA",
   jiraProjectKey: "PTATPA",
   jiraBoardName: "PTA Sprint Board",
   slackChannel: "#pta-sprint-planning",
+  sprintNamingPattern: "Q{quarter}S{sprint} - {year}",
   previousSprintName: "Q2S6 - 2026",
   currentSprintName: "Q2S7 - 2026",
   previousSprintStart: "2026-06-01",
@@ -65,7 +72,7 @@ const initialForm: PlanningForm = {
   previousSprintLeaveDays: 2,
   upcomingSprintLeaveDays: 3,
   confidenceAdjustment: 0,
-  manualVelocityOverride: "",
+  manualVelocityPerDeveloperOverride: "",
   velocityOverrideReason: ""
 };
 
@@ -189,6 +196,67 @@ const statusLabels: Record<AutomationStep["status"], string> = {
   done: "Done"
 };
 
+const workflowStepDefinitions: Array<{
+  id: WorkflowStepId;
+  title: string;
+  description: string;
+  primaryAction: string;
+  connector?: "jira" | "slack";
+}> = [
+  {
+    id: "clone",
+    title: "Start from previous sprint",
+    description: "Open or clone a saved sprint, or prepare this draft from the previous sprint context.",
+    primaryAction: "Clone sprint"
+  },
+  {
+    id: "calendar",
+    title: "Carry calendar context",
+    description: "Edit sprint names, dates, working days excluding holidays, holiday count, and team defaults.",
+    primaryAction: "Confirm calendar"
+  },
+  {
+    id: "velocity-baseline",
+    title: "Review velocity baseline",
+    description: "Import or edit the -3, -2, and provisional -1 velocity values used for the average.",
+    primaryAction: "Confirm baseline",
+    connector: "jira"
+  },
+  {
+    id: "slack-leaves",
+    title: "Collect Slack leave updates",
+    description: "Pull leave confirmations, then edit each teammate row before capacity is recalculated.",
+    primaryAction: "Import Slack leaves",
+    connector: "slack"
+  },
+  {
+    id: "jira-close",
+    title: "Close Jira sprint",
+    description: "Record the previous sprint closure action against the saved planning session.",
+    primaryAction: "Close Jira sprint",
+    connector: "jira"
+  },
+  {
+    id: "jira-reporting",
+    title: "Pull Jira completed story points",
+    description: "Fetch reporting values for the closed sprint, then edit the final -1 net velocity if needed.",
+    primaryAction: "Pull story points",
+    connector: "jira"
+  },
+  {
+    id: "velocity-decision",
+    title: "Calculate velocity and override",
+    description: "Review the calculated velocity and apply a team-approved override when context supports it.",
+    primaryAction: "Finalize velocity"
+  },
+  {
+    id: "finalize",
+    title: "Finalize sprint plan",
+    description: "Save the session, set review status, and inspect Slack/Jira previews before publishing later.",
+    primaryAction: "Save final plan"
+  }
+];
+
 function addDays(dateValue: string, days: number) {
   const date = new Date(`${dateValue}T00:00:00`);
 
@@ -224,14 +292,17 @@ function countWeekdays(startValue: string, endValue: string) {
   return count;
 }
 
-function nextSprintName(previousSprintName: string) {
+function nextSprintName(previousSprintName: string, pattern: string) {
   const match = previousSprintName.match(/^Q(\d+)S(\d+)\s*-\s*(\d{4})$/i);
 
   if (!match) {
     return previousSprintName;
   }
 
-  return `Q${match[1]}S${Number(match[2]) + 1} - ${match[3]}`;
+  return pattern
+    .replaceAll("{quarter}", match[1])
+    .replaceAll("{sprint}", String(Number(match[2]) + 1))
+    .replaceAll("{year}", match[3]);
 }
 
 function fallbackSlackPreview(form: PlanningForm) {
@@ -242,13 +313,32 @@ function fallbackSlackPreview(form: PlanningForm) {
   ].join("\n");
 }
 
+function formatSavedAt(value: string) {
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function toPerDeveloperOverride(input: SprintPlanningInput) {
+  if (input.manualVelocityOverride == null || input.teamMemberCount <= 0) {
+    return "";
+  }
+
+  return String(Math.round((input.manualVelocityOverride / input.teamMemberCount) * 10) / 10);
+}
+
 function toPlanningForm(input: SprintPlanningInput): PlanningForm {
   return {
     teamKey: input.teamKey ?? "",
     teamName: input.teamName,
+    jiraProjectName: "",
     jiraProjectKey: input.jiraProjectKey,
     jiraBoardName: input.jiraBoardName,
     slackChannel: input.slackChannel,
+    sprintNamingPattern: "Q{quarter}S{sprint} - {year}",
     previousSprintName: input.previousSprintName,
     currentSprintName: input.currentSprintName,
     previousSprintStart: input.previousSprintDates.start,
@@ -264,7 +354,7 @@ function toPlanningForm(input: SprintPlanningInput): PlanningForm {
     previousSprintLeaveDays: input.previousSprintLeaveDays,
     upcomingSprintLeaveDays: input.upcomingSprintLeaveDays,
     confidenceAdjustment: input.confidenceAdjustment,
-    manualVelocityOverride: input.manualVelocityOverride == null ? "" : String(input.manualVelocityOverride),
+    manualVelocityPerDeveloperOverride: toPerDeveloperOverride(input),
     velocityOverrideReason: input.velocityOverrideReason
   };
 }
@@ -280,15 +370,71 @@ export function SprintPlanningWorkflow() {
   const [lastSavedAt, setLastSavedAt] = useState("");
   const [isDirty, setIsDirty] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SavedSprintPlanningSessionSummary[]>([]);
+  const [viewMode, setViewMode] = useState<"home" | "workflow">("home");
   const [isSessionBrowserOpen, setIsSessionBrowserOpen] = useState(false);
   const [isConnectorRunning, setIsConnectorRunning] = useState(false);
+  const [activeStepId, setActiveStepId] = useState<WorkflowStepId>("clone");
+  const [completedStepIds, setCompletedStepIds] = useState<WorkflowStepId[]>([]);
+  const [scrumMasterStatus, setScrumMasterStatus] = useState<ScrumMasterStatusResponse | null>(null);
   const planning = useMemo(() => calculatePlanning(form), [form]);
   const apiOutput = apiPlan?.output;
   const workflowChecklist = apiOutput?.checklist ?? workflowSteps;
   const slackPreview = apiOutput?.slackLeaveRequestPreview ?? fallbackSlackPreview(form);
+  const activeStep = workflowStepDefinitions.find((step) => step.id === activeStepId) ?? workflowStepDefinitions[0];
+
+  useEffect(() => {
+    getScrumMasterStatus()
+      .then((payload) => setScrumMasterStatus(payload))
+      .catch(() => setScrumMasterStatus(null));
+  }, []);
+
+  useEffect(() => {
+    refreshSavedSessions("Loading sprint planning sessions...");
+  }, []);
 
   function markDirty() {
     setIsDirty(true);
+  }
+
+  function completeStep(stepId: WorkflowStepId, nextStepId?: WorkflowStepId) {
+    setCompletedStepIds((current) => (current.includes(stepId) ? current : [...current, stepId]));
+
+    if (nextStepId) {
+      setActiveStepId(nextStepId);
+    }
+  }
+
+  function skipStep(stepId: WorkflowStepId) {
+    const currentIndex = workflowStepDefinitions.findIndex((step) => step.id === stepId);
+    const nextStep = workflowStepDefinitions[currentIndex + 1];
+
+    completeStep(stepId, nextStep?.id);
+    setDraftStatus(`${workflowStepDefinitions[currentIndex]?.title ?? "Workflow step"} skipped; editable values kept`);
+  }
+
+  function getWorkflowStepState(stepId: WorkflowStepId): WorkflowStepState {
+    if (stepId === activeStepId) {
+      return "current";
+    }
+
+    if (completedStepIds.includes(stepId)) {
+      return "completed";
+    }
+
+    const stepIndex = workflowStepDefinitions.findIndex((step) => step.id === stepId);
+    const previousStepsComplete = workflowStepDefinitions
+      .slice(0, stepIndex)
+      .every((step) => completedStepIds.includes(step.id));
+
+    return previousStepsComplete ? "available" : "locked";
+  }
+
+  function navigateWorkflowStep(stepId: WorkflowStepId) {
+    const state = getWorkflowStepState(stepId);
+
+    if (state !== "locked") {
+      setActiveStepId(stepId);
+    }
   }
 
   function updateText(field: keyof PlanningForm, value: string) {
@@ -380,8 +526,10 @@ export function SprintPlanningWorkflow() {
       const payload = await createSprintPlanningWorkflowDraft(toSprintPlanningInput(form));
       setApiPlan(payload.data ?? null);
       setDraftStatus("Draft generated from backend workflow engine");
+      return true;
     } catch {
       setDraftStatus("API unavailable; showing local calculation");
+      return false;
     }
   }
 
@@ -396,11 +544,13 @@ export function SprintPlanningWorkflow() {
         ...current,
         teamKey: config.teamKey,
         teamName: config.teamName,
+        jiraProjectName: config.jira.projectName ?? "",
         jiraProjectKey: config.jira.projectKey,
         jiraBoardName: config.jira.boardName,
         slackChannel: config.slack.channelName,
         teamMemberCount: config.defaults.teamMemberCount,
-        daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays
+        daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays,
+        sprintNamingPattern: config.defaults.sprintNamingPattern ?? current.sprintNamingPattern
       }));
       setDraftStatus("Team config loaded from backend defaults");
       markDirty();
@@ -417,6 +567,7 @@ export function SprintPlanningWorkflow() {
         teamKey: form.teamKey,
         teamName: form.teamName,
         jira: {
+          projectName: form.jiraProjectName,
           projectKey: form.jiraProjectKey,
           boardName: form.jiraBoardName
         },
@@ -425,7 +576,8 @@ export function SprintPlanningWorkflow() {
         },
         defaults: {
           teamMemberCount: form.teamMemberCount,
-          daysInSprintExcludingHolidays: form.daysInSprintExcludingHolidays
+          daysInSprintExcludingHolidays: form.daysInSprintExcludingHolidays,
+          sprintNamingPattern: form.sprintNamingPattern
         }
       });
       const config = payload.data;
@@ -434,11 +586,13 @@ export function SprintPlanningWorkflow() {
         ...current,
         teamKey: config.teamKey,
         teamName: config.teamName,
+        jiraProjectName: config.jira.projectName ?? "",
         jiraProjectKey: config.jira.projectKey,
         jiraBoardName: config.jira.boardName,
         slackChannel: config.slack.channelName,
         teamMemberCount: config.defaults.teamMemberCount,
-        daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays
+        daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays,
+        sprintNamingPattern: config.defaults.sprintNamingPattern ?? current.sprintNamingPattern
       }));
       setDraftStatus("Team connector config saved for mock environment");
     } catch {
@@ -467,8 +621,10 @@ export function SprintPlanningWorkflow() {
       }));
       setDraftStatus("Imported last three sprint velocities from Jira reporting");
       markDirty();
+      return true;
     } catch {
       setDraftStatus("Jira reporting import unavailable; keep editing velocity rows");
+      return false;
     }
   }
 
@@ -490,15 +646,17 @@ export function SprintPlanningWorkflow() {
       }));
       setDraftStatus("Imported leave confirmations from mock Slack thread");
       markDirty();
+      return true;
     } catch {
       setDraftStatus("Slack leave confirmation import unavailable; keep editing leave rows");
+      return false;
     }
   }
 
   function clonePreviousSprint() {
     setForm((current) => ({
       ...current,
-      currentSprintName: nextSprintName(current.previousSprintName),
+      currentSprintName: nextSprintName(current.previousSprintName, current.sprintNamingPattern),
       currentSprintStart: addDays(current.previousSprintStart, 14),
       currentSprintEnd: addDays(current.previousSprintEnd, 14),
       previousVelocityMinus3: current.previousVelocityMinus2,
@@ -539,13 +697,20 @@ export function SprintPlanningWorkflow() {
       });
       setIsDirty(false);
       setDraftStatus("Sprint planning session saved");
+      void refreshSavedSessions();
+      return true;
     } catch {
       setDraftStatus("Save failed; keep the session open and try again");
+      return false;
     }
   }
 
   function hydrateSavedSession(session: SavedSprintPlanningSession, statusMessage: string) {
-    setForm(toPlanningForm(session.input));
+    setForm((current) => ({
+      ...toPlanningForm(session.input),
+      jiraProjectName: current.jiraProjectName,
+      sprintNamingPattern: current.sprintNamingPattern
+    }));
     setVelocityHistory(session.velocityHistory);
     setLeaveConfirmations(session.leaveConfirmations);
     setPlanningStatus(session.planningStatus);
@@ -559,17 +724,36 @@ export function SprintPlanningWorkflow() {
   }
 
   async function openSessionBrowser() {
-    setDraftStatus("Loading saved sprint planning sessions...");
+    await refreshSavedSessions("Loading saved sprint planning sessions...");
+    setIsSessionBrowserOpen(true);
+  }
+
+  async function refreshSavedSessions(loadingMessage?: string) {
+    if (loadingMessage) {
+      setDraftStatus(loadingMessage);
+    }
 
     try {
       const payload = await listSprintPlanningSessions(form.teamKey);
 
       setSavedSessions(payload.data);
-      setIsSessionBrowserOpen(true);
       setDraftStatus(payload.data.length > 0 ? "Saved sessions loaded" : "No saved sessions for this team yet");
     } catch {
       setDraftStatus("Saved sessions unavailable");
     }
+  }
+
+  function startNewPlanningSession() {
+    setSessionId(null);
+    setPlanningStatus("draft");
+    setLastSavedAt("");
+    setApiPlan(null);
+    setIsDirty(true);
+    setCompletedStepIds([]);
+    setActiveStepId("clone");
+    setIsSessionBrowserOpen(false);
+    setViewMode("workflow");
+    setDraftStatus("New sprint planning session started");
   }
 
   async function loadSession(nextSessionId: string) {
@@ -580,7 +764,9 @@ export function SprintPlanningWorkflow() {
       const session = payload.data;
 
       setIsSessionBrowserOpen(false);
+      setViewMode("workflow");
       hydrateSavedSession(session, `Opened saved session for ${session.input.currentSprintName}`);
+      completeStep("clone", "calendar");
     } catch {
       setDraftStatus("Saved session could not be opened");
     }
@@ -603,6 +789,8 @@ export function SprintPlanningWorkflow() {
       const payload = await cloneSprintPlanningSession(sourceSessionId);
       hydrateSavedSession(payload.data, `Created ${payload.data.input.currentSprintName} from previous sprint context`);
       setIsSessionBrowserOpen(false);
+      setViewMode("workflow");
+      completeStep("clone", "calendar");
     } catch {
       setDraftStatus("Saved session clone failed");
     }
@@ -611,12 +799,12 @@ export function SprintPlanningWorkflow() {
   async function runSavedConnectorAction(actionKey: SprintPlanningConnectorActionKey) {
     if (sessionId == null) {
       setDraftStatus("Save this planning session before running connectors");
-      return;
+      return false;
     }
 
     if (isDirty) {
       setDraftStatus("Save changes before running connectors against this session");
-      return;
+      return false;
     }
 
     const runningMessages: Record<SprintPlanningConnectorActionKey, string> = {
@@ -636,24 +824,345 @@ export function SprintPlanningWorkflow() {
     try {
       const payload = await runSprintPlanningConnectorAction(sessionId, actionKey);
       hydrateSavedSession(payload.data.session, successMessages[actionKey]);
+      return true;
     } catch {
       setDraftStatus("Connector action failed; saved session was not updated");
+      return false;
     } finally {
       setIsConnectorRunning(false);
     }
   }
 
   async function runSavedConnectorWorkflow() {
+    await runSavedConnectorAction("collect-leaves");
     await runSavedConnectorAction("close-previous-sprint");
     await runSavedConnectorAction("fetch-closed-story-points");
-    await runSavedConnectorAction("collect-leaves");
   }
 
-  const summaryVelocity = apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
+  async function runActiveStepPrimaryAction() {
+    if (activeStepId === "clone") {
+      clonePreviousSprint();
+      completeStep("clone", "calendar");
+      return;
+    }
+
+    if (activeStepId === "calendar") {
+      calculateWorkingDays();
+      completeStep("calendar", "velocity-baseline");
+      return;
+    }
+
+    if (activeStepId === "velocity-baseline") {
+      completeStep("velocity-baseline", "slack-leaves");
+      return;
+    }
+
+    if (activeStepId === "slack-leaves") {
+      const imported = await importSlackLeaveConfirmations();
+
+      if (imported) {
+        completeStep("slack-leaves", "jira-close");
+      }
+
+      return;
+    }
+
+    if (activeStepId === "jira-close") {
+      const closed = await runSavedConnectorAction("close-previous-sprint");
+
+      if (closed) {
+        completeStep("jira-close", "jira-reporting");
+      }
+
+      return;
+    }
+
+    if (activeStepId === "jira-reporting") {
+      const pulled = await runSavedConnectorAction("fetch-closed-story-points");
+
+      if (pulled) {
+        completeStep("jira-reporting", "velocity-decision");
+      }
+
+      return;
+    }
+
+    if (activeStepId === "velocity-decision") {
+      await generateDraft();
+      completeStep("velocity-decision", "finalize");
+      return;
+    }
+
+    const saved = await saveSession();
+
+    if (saved) {
+      completeStep("finalize");
+    }
+  }
+
+  function renderStepContent() {
+    if (activeStepId === "clone") {
+      return (
+        <>
+          <SectionTitle icon={Settings2} title="Team connectors" />
+          <div className="inline-actions">
+            <button className="inline-action" type="button" onClick={loadTeamConfig}>
+              <Settings2 size={16} aria-hidden="true" />
+              Load team config
+            </button>
+            <button className="inline-action" type="button" onClick={saveTeamConfig}>
+              <SaveIcon size={16} aria-hidden="true" />
+              Save team config
+            </button>
+          </div>
+          <div className="field-grid">
+            <TextField label="Team key" value={form.teamKey} onChange={(value) => updateText("teamKey", value)} />
+            <TextField label="Team" value={form.teamName} onChange={(value) => updateText("teamName", value)} />
+            <TextField
+              label="Team project name"
+              value={form.jiraProjectName}
+              onChange={(value) => updateText("jiraProjectName", value)}
+            />
+            <TextField
+              label="Jira project key"
+              value={form.jiraProjectKey}
+              onChange={(value) => updateText("jiraProjectKey", value)}
+            />
+            <TextField
+              label="Jira board"
+              value={form.jiraBoardName}
+              onChange={(value) => updateText("jiraBoardName", value)}
+            />
+            <TextField
+              label="Slack channel"
+              value={form.slackChannel}
+              onChange={(value) => updateText("slackChannel", value)}
+            />
+            <TextField
+              label="Sprint naming pattern"
+              placeholder="Q{quarter}S{sprint} - {year}"
+              value={form.sprintNamingPattern}
+              onChange={(value) => updateText("sprintNamingPattern", value)}
+            />
+          </div>
+          <div className="workflow-note">
+            <strong>Saved sprint source</strong>
+            <p>Use Open to choose a previous sprint session, then Clone to new sprint inside the saved-session browser.</p>
+          </div>
+        </>
+      );
+    }
+
+    if (activeStepId === "calendar") {
+      return (
+        <>
+          <SectionTitle icon={CalendarDays} title="Sprint calendar" />
+          <div className="inline-actions">
+            <button className="inline-action" type="button" onClick={clonePreviousSprint}>
+              <Copy size={16} aria-hidden="true" />
+              Clone previous sprint context
+            </button>
+            <button className="inline-action" type="button" onClick={calculateWorkingDays}>
+              <CalendarDays size={16} aria-hidden="true" />
+              Calculate working days
+            </button>
+          </div>
+          <div className="field-grid">
+            <TextField
+              label="Previous sprint"
+              value={form.previousSprintName}
+              onChange={(value) => updateText("previousSprintName", value)}
+            />
+            <TextField
+              label="Current sprint"
+              value={form.currentSprintName}
+              onChange={(value) => updateText("currentSprintName", value)}
+            />
+            <TextField
+              label="Previous start"
+              type="date"
+              value={form.previousSprintStart}
+              onChange={(value) => updateText("previousSprintStart", value)}
+            />
+            <TextField
+              label="Previous end"
+              type="date"
+              value={form.previousSprintEnd}
+              onChange={(value) => updateText("previousSprintEnd", value)}
+            />
+            <TextField
+              label="Current start"
+              type="date"
+              value={form.currentSprintStart}
+              onChange={(value) => updateText("currentSprintStart", value)}
+            />
+            <TextField
+              label="Current end"
+              type="date"
+              value={form.currentSprintEnd}
+              onChange={(value) => updateText("currentSprintEnd", value)}
+            />
+            <NumberField
+              label="Days excl. holidays"
+              value={form.daysInSprintExcludingHolidays}
+              onChange={(value) => updateNumber("daysInSprintExcludingHolidays", value)}
+            />
+            <NumberField
+              label="Holiday count"
+              value={form.holidayCount}
+              onChange={(value) => updateNumber("holidayCount", value)}
+            />
+            <NumberField
+              label="Team members"
+              value={form.teamMemberCount}
+              onChange={(value) => updateNumber("teamMemberCount", value)}
+            />
+          </div>
+        </>
+      );
+    }
+
+    if (activeStepId === "velocity-baseline" || activeStepId === "jira-reporting") {
+      return (
+        <>
+          <SectionTitle
+            icon={Table2}
+            title={activeStepId === "jira-reporting" ? "Completed story points" : "Velocity baseline"}
+          />
+          <div className="inline-actions">
+            <button className="inline-action" type="button" onClick={importJiraVelocityHistory}>
+              <Table2 size={16} aria-hidden="true" />
+              Import Jira velocity history
+            </button>
+          </div>
+          <VelocityHistoryTable rows={velocityHistory} onChange={updateVelocityHistory} />
+        </>
+      );
+    }
+
+    if (activeStepId === "slack-leaves") {
+      return (
+        <>
+          <SectionTitle icon={MessageSquare} title="Slack leave confirmations" />
+          <div className="inline-actions">
+            <button className="inline-action" type="button" onClick={importSlackLeaveConfirmations}>
+              <MessageSquare size={16} aria-hidden="true" />
+              Import Slack leave confirmations
+            </button>
+          </div>
+          <LeaveConfirmationsTable rows={leaveConfirmations} onChange={updateLeaveConfirmation} />
+          <div className="workflow-note">
+            <strong>Leave totals</strong>
+            <p>
+              Previous sprint: {form.previousSprintLeaveDays} days · Upcoming sprint: {form.upcomingSprintLeaveDays} days
+            </p>
+          </div>
+        </>
+      );
+    }
+
+    if (activeStepId === "jira-close") {
+      return (
+        <>
+          <SectionTitle icon={ClipboardCheck} title="Close previous Jira sprint" />
+          <div className="workflow-note">
+            <strong>{form.previousSprintName}</strong>
+            <p>Close this sprint on {form.jiraBoardName}. Mock mode records the action in this saved session only.</p>
+          </div>
+          <div className="preview-list">
+            <p>{apiOutput?.jiraCloseReportPreview.closeSprintAction ?? `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}</p>
+            <p>Connector action requires a saved session with no unsaved changes.</p>
+          </div>
+        </>
+      );
+    }
+
+    if (activeStepId === "velocity-decision") {
+      return (
+        <>
+          <SectionTitle icon={Goal} title="Velocity decision" />
+          <div className="metric-grid">
+            <Metric label="Average net velocity" value={planning.averageNetVelocity} />
+            <Metric label="Capacity-adjusted velocity" value={planning.capacityAdjustedVelocity} />
+            <Metric label="Confidence-adjusted velocity" value={planning.confidenceAdjustedVelocity} />
+          </div>
+          <div className="field-grid velocity-controls">
+            <NumberField
+              label="Confidence adjustment %"
+              value={form.confidenceAdjustment}
+              onChange={(value) => updateNumber("confidenceAdjustment", value)}
+            />
+            <TextField
+              inputMode="decimal"
+              label="Avg velocity per developer override"
+              placeholder="Optional per-dev target"
+              value={form.manualVelocityPerDeveloperOverride}
+              onChange={(value) => updateText("manualVelocityPerDeveloperOverride", value)}
+            />
+            <TextField
+              label="Override reason"
+              placeholder="Confidence, low-effort spillover, or team call"
+              value={form.velocityOverrideReason}
+              onChange={(value) => updateText("velocityOverrideReason", value)}
+            />
+          </div>
+          {planning.manualVelocityOverrideTotal == null ? null : (
+            <div className="workflow-note derived-velocity-note">
+              <strong>Total sprint velocity derived from per-dev override</strong>
+              <p>
+                {planning.manualVelocityPerDeveloperOverride} SP per developer × {form.teamMemberCount} developers ={" "}
+                {planning.manualVelocityOverrideTotal} SP total sprint velocity.
+              </p>
+            </div>
+          )}
+        </>
+      );
+    }
+
+    return (
+      <>
+        <SectionTitle icon={ListChecks} title="Finalize sprint plan" />
+        <label className="status-select final-status-select">
+          <span>Planning status</span>
+          <select
+            value={planningStatus}
+            onChange={(event) => {
+              setPlanningStatus(event.target.value as PlanningStatus);
+              markDirty();
+            }}
+          >
+            <option value="draft">Draft</option>
+            <option value="ready_for_review">Ready for review</option>
+            <option value="finalized">Finalized</option>
+            <option value="published">Published</option>
+          </select>
+        </label>
+        <div className="final-review-grid">
+          <article>
+            <h3>Slack leave request</h3>
+            <pre className="preview-box">{slackPreview}</pre>
+          </article>
+          <article>
+            <h3>Jira close and report</h3>
+            <div className="preview-list">
+              <p>{apiOutput?.jiraCloseReportPreview.closeSprintAction ?? `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}</p>
+              <p>{apiOutput?.jiraCloseReportPreview.reportingAction ?? `Fetch completed story points for ${form.previousSprintName} in ${form.jiraProjectKey}`}</p>
+              <p>Last net velocity: {apiOutput?.jiraCloseReportPreview.lastNetVelocity ?? form.lastNetVelocity}</p>
+            </div>
+          </article>
+        </div>
+      </>
+    );
+  }
+
+  const summaryVelocity = isDirty ? planning.sprintVelocity : apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
   const sessionLabel = sessionId == null ? "New planning session" : `${form.currentSprintName} saved draft`;
   const lastSavedLabel = lastSavedAt === "" ? "Not saved yet" : `Last saved ${new Date(lastSavedAt).toLocaleString()}`;
   const cloneDisabled = isDirty || isConnectorRunning;
   const connectorActionsDisabled = sessionId == null || isDirty || isConnectorRunning;
+  const connectorMode = scrumMasterStatus?.sprintPlanningConnectorMode ?? "mock";
+  const activeStepIndex = workflowStepDefinitions.findIndex((step) => step.id === activeStepId);
+  const previousStep = workflowStepDefinitions[activeStepIndex - 1];
 
   return (
     <main className="app-shell">
@@ -697,6 +1206,110 @@ export function SprintPlanningWorkflow() {
         </aside>
       </section>
 
+      {viewMode === "home" ? (
+        <section className="sprint-home" aria-labelledby="sprint-home-title">
+          <div className="sprint-home-header">
+            <div>
+              <span className="panel-kicker">Sprint planner coworker</span>
+              <h2 id="sprint-home-title">Sprint plans</h2>
+              <p>Resume an in-progress sprint plan, review finalized plans, or start the next planning workflow.</p>
+            </div>
+            <div className="sprint-home-actions">
+              <button type="button" onClick={() => refreshSavedSessions("Refreshing sprint planning sessions...")}>
+                <History size={16} aria-hidden="true" />
+                Refresh
+              </button>
+              <button className="primary-home-action" type="button" onClick={startNewPlanningSession}>
+                <Plus size={16} aria-hidden="true" />
+                Start sprint plan
+              </button>
+            </div>
+          </div>
+
+          <div className="sprint-home-grid">
+            <article className="sprint-home-summary">
+              <SectionTitle icon={Settings2} title="Team setup" />
+              <dl>
+                <div>
+                  <dt>Team</dt>
+                  <dd>{form.teamName}</dd>
+                </div>
+                <div>
+                  <dt>Project</dt>
+                  <dd>{form.jiraProjectName || form.jiraProjectKey}</dd>
+                </div>
+                <div>
+                  <dt>Pattern</dt>
+                  <dd>{form.sprintNamingPattern}</dd>
+                </div>
+                <div>
+                  <dt>Connectors</dt>
+                  <dd>{connectorMode}</dd>
+                </div>
+              </dl>
+            </article>
+
+            <div className="sprint-home-list" aria-label="Saved sprint plans">
+              {savedSessions.length === 0 ? (
+                <div className="empty-sprint-list">
+                  <FolderOpen size={34} aria-hidden="true" />
+                  <strong>No sprint plans saved yet</strong>
+                  <p>Start a sprint plan and save it once to make it available here for resume and review.</p>
+                  <button type="button" onClick={startNewPlanningSession}>
+                    <Plus size={16} aria-hidden="true" />
+                    Start sprint plan
+                  </button>
+                </div>
+              ) : (
+                savedSessions.map((session) => (
+                  <article className="sprint-plan-card" key={session.sessionId}>
+                    <div className="sprint-plan-main">
+                      <span className={`planning-status-pill ${session.planningStatus}`}>
+                        {session.planningStatus.replaceAll("_", " ")}
+                      </span>
+                      <h3>{session.currentSprintName}</h3>
+                      <p>
+                        {session.currentSprintDates.start} to {session.currentSprintDates.end} · cloned from{" "}
+                        {session.previousSprintName}
+                      </p>
+                    </div>
+                    <div className="sprint-plan-metrics">
+                      <span>
+                        <strong>{session.sprintVelocity}</strong>
+                        SP
+                      </span>
+                      <span>
+                        <strong>{session.pendingLeaveConfirmations}</strong>
+                        pending leaves
+                      </span>
+                      <span>
+                        <strong>{session.connectorPendingSteps}</strong>
+                        connector steps
+                      </span>
+                    </div>
+                    <div className="sprint-plan-footer">
+                      <small>Updated {formatSavedAt(session.updatedAt)}</small>
+                      <div>
+                        <button type="button" onClick={() => loadSession(session.sessionId)}>
+                          <FolderOpen size={16} aria-hidden="true" />
+                          {session.planningStatus === "published" || session.planningStatus === "finalized"
+                            ? "Review"
+                            : "Continue"}
+                        </button>
+                        <button type="button" onClick={() => cloneSavedSession(session.sessionId)}>
+                          <Copy size={16} aria-hidden="true" />
+                          Clone next
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <>
       <section className="session-strip" aria-label="Saved sprint planning session">
         <div>
           <span className="panel-kicker">Session</span>
@@ -721,7 +1334,18 @@ export function SprintPlanningWorkflow() {
           </select>
         </label>
         <div className="session-actions">
-          <button type="button" onClick={saveSession} disabled={isConnectorRunning}>
+          <button
+            type="button"
+            onClick={() => {
+              void refreshSavedSessions("Refreshing sprint planning sessions...");
+              setViewMode("home");
+            }}
+            disabled={isConnectorRunning}
+          >
+            <History size={16} />
+            Sprint list
+          </button>
+          <button className="primary-session-action" type="button" onClick={saveSession} disabled={isConnectorRunning}>
             <SaveIcon size={16} />
             Save
           </button>
@@ -827,256 +1451,109 @@ export function SprintPlanningWorkflow() {
         </section>
       ) : null}
 
-      <section className="planning-grid">
-        <form className="planning-form">
-          <SectionTitle icon={Settings2} title="Team connectors" />
-          <div className="inline-actions">
-            <button className="inline-action" type="button" onClick={loadTeamConfig}>
-              <Settings2 size={16} />
-              Load team config
-            </button>
-            <button className="inline-action" type="button" onClick={saveTeamConfig}>
-              <SaveIcon size={16} />
-              Save team config
-            </button>
-          </div>
-          <div className="field-grid">
-            <TextField
-              label="Team key"
-              value={form.teamKey}
-              onChange={(value) => updateText("teamKey", value)}
-            />
-            <TextField label="Team" value={form.teamName} onChange={(value) => updateText("teamName", value)} />
-            <TextField
-              label="Jira project key"
-              value={form.jiraProjectKey}
-              onChange={(value) => updateText("jiraProjectKey", value)}
-            />
-            <TextField
-              label="Jira board"
-              value={form.jiraBoardName}
-              onChange={(value) => updateText("jiraBoardName", value)}
-            />
-            <TextField
-              label="Slack channel"
-              value={form.slackChannel}
-              onChange={(value) => updateText("slackChannel", value)}
-            />
-          </div>
+      <Tabs.Root className="workflow-grid" value={activeStepId} onValueChange={(value) => navigateWorkflowStep(value as WorkflowStepId)}>
+        <Tabs.List className="workflow-stepper" aria-label="Sprint planning workflow">
+          {workflowStepDefinitions.map((step, index) => {
+            const state = getWorkflowStepState(step.id);
+            const isLocked = state === "locked";
 
-          <SectionTitle icon={CalendarDays} title="Sprint calendar" />
-          <div className="inline-actions">
-            <button className="inline-action" type="button" onClick={clonePreviousSprint}>
-              <Copy size={16} />
-              Clone previous sprint context
-            </button>
-            <button className="inline-action" type="button" onClick={calculateWorkingDays}>
-              <CalendarDays size={16} />
-              Calculate working days
-            </button>
-          </div>
-          <div className="field-grid">
-            <TextField
-              label="Previous sprint"
-              value={form.previousSprintName}
-              onChange={(value) => updateText("previousSprintName", value)}
-            />
-            <TextField
-              label="Current sprint"
-              value={form.currentSprintName}
-              onChange={(value) => updateText("currentSprintName", value)}
-            />
-            <TextField
-              label="Previous start"
-              type="date"
-              value={form.previousSprintStart}
-              onChange={(value) => updateText("previousSprintStart", value)}
-            />
-            <TextField
-              label="Previous end"
-              type="date"
-              value={form.previousSprintEnd}
-              onChange={(value) => updateText("previousSprintEnd", value)}
-            />
-            <TextField
-              label="Current start"
-              type="date"
-              value={form.currentSprintStart}
-              onChange={(value) => updateText("currentSprintStart", value)}
-            />
-            <TextField
-              label="Current end"
-              type="date"
-              value={form.currentSprintEnd}
-              onChange={(value) => updateText("currentSprintEnd", value)}
-            />
-            <NumberField
-              label="Days excl. holidays"
-              value={form.daysInSprintExcludingHolidays}
-              onChange={(value) => updateNumber("daysInSprintExcludingHolidays", value)}
-            />
-            <NumberField
-              label="Holiday count"
-              value={form.holidayCount}
-              onChange={(value) => updateNumber("holidayCount", value)}
-            />
-            <NumberField
-              label="Team members"
-              value={form.teamMemberCount}
-              onChange={(value) => updateNumber("teamMemberCount", value)}
-            />
-          </div>
+            return (
+              <Tabs.Trigger className={`workflow-step ${state}`} disabled={isLocked} key={step.id} value={step.id}>
+                <span className="workflow-step-index">{index + 1}</span>
+                <span>
+                  <strong>{step.title}</strong>
+                  <small>
+                    {state === "completed"
+                      ? "Completed"
+                      : state === "current"
+                        ? "In progress"
+                        : state === "available"
+                          ? "Available"
+                          : "Locked"}
+                  </small>
+                </span>
+              </Tabs.Trigger>
+            );
+          })}
+        </Tabs.List>
 
-          <SectionTitle icon={Table2} title="Velocity and capacity" />
-          <div className="inline-actions">
-            <button className="inline-action" type="button" onClick={importJiraVelocityHistory}>
-              <Table2 size={16} />
-              Import Jira velocity history
-            </button>
-            <button className="inline-action" type="button" onClick={importSlackLeaveConfirmations}>
-              <MessageSquare size={16} />
-              Import Slack leave confirmations
-            </button>
-          </div>
-          <div className="velocity-history" aria-describedby="velocity-history-help">
-            <table>
-              <caption>Velocity history used for average</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Sprint</th>
-                  <th scope="col">Net velocity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {velocityHistory.map((row) => (
-                  <tr key={row.sprintOffset}>
-                    <th scope="row">
-                      <span>{row.sprintOffset === -1 ? "Last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}</span>
-                      <small>
-                        {row.sprintName} · {row.completedStoryPoints} closed SP · {row.leaveDays} leave days ·{" "}
-                        <span className={`source-pill ${row.source}`}>
-                          {row.source === "mock-jira-report" ? "Mock Jira" : "Manual"}
-                        </span>
-                      </small>
-                    </th>
-                    <td>
-                      <input
-                        min="0"
-                        step="0.5"
-                        type="number"
-                        value={row.netVelocity}
-                        aria-label={`Net velocity for ${row.sprintOffset === -1 ? "last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}`}
-                        onChange={(event) =>
-                          updateVelocityHistory(row.sprintOffset, "netVelocity", event.target.value)
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p id="velocity-history-help">
-              Average is calculated from the three net velocity values. Jira import updates the last closed sprint
-              story points before the SM finalizes the override.
-            </p>
-          </div>
-          <div className="leave-confirmations" aria-describedby="leave-confirmations-help">
-            <table>
-              <caption>Slack leave confirmations</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Teammate</th>
-                  <th scope="col">Previous sprint</th>
-                  <th scope="col">Upcoming sprint</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaveConfirmations.map((row) => (
-                  <tr key={row.slackUserId}>
-                    <th scope="row">
-                      <span>{row.teammateName}</span>
-                      <small>
-                        {row.confirmationStatus.replaceAll("_", " ")} ·{" "}
-                        <span className={`source-pill ${row.source}`}>
-                          {row.source === "mock-slack-thread" ? "Mock Slack" : "Manual"}
-                        </span>
-                      </small>
-                    </th>
-                    <td>
-                      <input
-                        min="0"
-                        step="0.5"
-                        type="number"
-                        value={row.previousSprintLeaveDays}
-                        aria-label={`Previous sprint leave days for ${row.teammateName}`}
-                        onChange={(event) =>
-                          updateLeaveConfirmation(row.slackUserId, "previousSprintLeaveDays", event.target.value)
-                        }
-                      />
-                    </td>
-                    <td>
-                      <input
-                        min="0"
-                        step="0.5"
-                        type="number"
-                        value={row.upcomingSprintLeaveDays}
-                        aria-label={`Upcoming sprint leave days for ${row.teammateName}`}
-                        onChange={(event) =>
-                          updateLeaveConfirmation(row.slackUserId, "upcomingSprintLeaveDays", event.target.value)
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p id="leave-confirmations-help">
-              Table totals update the previous and upcoming sprint leave days used in capacity and Slack previews.
-            </p>
-          </div>
-          <div className="field-grid velocity-controls">
-            <NumberField
-              label="Confidence adjustment %"
-              value={form.confidenceAdjustment}
-              onChange={(value) => updateNumber("confidenceAdjustment", value)}
-            />
-            <TextField
-              inputMode="decimal"
-              label="Manual velocity override"
-              placeholder="Optional"
-              value={form.manualVelocityOverride}
-              onChange={(value) => updateText("manualVelocityOverride", value)}
-            />
-            <TextField
-              label="Override reason"
-              placeholder="Confidence, low-effort spillover, or team call"
-              value={form.velocityOverrideReason}
-              onChange={(value) => updateText("velocityOverrideReason", value)}
-            />
-          </div>
-        </form>
+        <Tabs.Content className="workflow-editor" value={activeStepId} asChild>
+          <form>
+            <div className="workflow-editor-header">
+              <div>
+                <span className="panel-kicker">Step {activeStepIndex + 1}</span>
+                <h2>{activeStep.title}</h2>
+                <p>{activeStep.description}</p>
+              </div>
+              {activeStep.connector ? (
+                <span className={`connector-mode-badge ${activeStep.connector}`}>Mock {activeStep.connector}</span>
+              ) : null}
+            </div>
 
-        <aside className="output-column">
-          <article className="output-card">
-            <SectionTitle icon={Goal} title="Velocity calculation" />
-            <Metric label="Average net velocity" value={planning.averageNetVelocity} />
-            <Metric label="Baseline capacity days" value={planning.baselineCapacityDays} />
-            <Metric label="Available capacity days" value={planning.availableCapacityDays} />
-            <Metric label="Capacity-adjusted velocity" value={planning.capacityAdjustedVelocity} />
-            <Metric label="Confidence-adjusted velocity" value={planning.confidenceAdjustedVelocity} />
+            {renderStepContent()}
+
+            <div className="workflow-actions">
+              <button
+                className="secondary-action"
+                disabled={!previousStep}
+                onClick={() => previousStep && setActiveStepId(previousStep.id)}
+                type="button"
+              >
+                Back
+              </button>
+              {activeStepId !== "finalize" ? (
+                <button className="secondary-action" onClick={() => skipStep(activeStepId)} type="button">
+                  Skip for now
+                </button>
+              ) : null}
+              <button
+                className="primary-action"
+                disabled={
+                  isConnectorRunning ||
+                  (activeStepId === "jira-close" && connectorActionsDisabled) ||
+                  (activeStepId === "jira-reporting" && connectorActionsDisabled)
+                }
+                onClick={runActiveStepPrimaryAction}
+                type="button"
+              >
+                {activeStep.primaryAction}
+              </button>
+            </div>
+          </form>
+        </Tabs.Content>
+
+        <aside className="workflow-summary">
+          <article className="output-card velocity-summary-card">
+            <SectionTitle icon={Goal} title="Sprint velocity" />
             <div className="final-metric">
               <span>Final sprint velocity</span>
               <strong>{summaryVelocity}</strong>
             </div>
+            <Metric label="Average net velocity" value={planning.averageNetVelocity} />
+            <Metric label="Available capacity days" value={planning.availableCapacityDays} />
+            <Metric label="Capacity-adjusted velocity" value={planning.capacityAdjustedVelocity} />
           </article>
 
           <article className="output-card">
-            <SectionTitle icon={ListChecks} title="SM workflow" />
+            <SectionTitle icon={ClipboardCheck} title="Connector status" />
+            <div className="connector-status-grid">
+              <span>Mode</span>
+              <strong>{connectorMode}</strong>
+              <span>Jira</span>
+              <strong>Mock only</strong>
+              <span>Slack</span>
+              <strong>Mock only</strong>
+            </div>
+            <p className="connector-status-note">Mock actions update this saved session only. They do not change Jira or Slack.</p>
+          </article>
+
+          <article className="output-card">
+            <SectionTitle icon={ListChecks} title="Workflow status" />
             <div className="step-list">
               {workflowChecklist.map((step) => (
                 <div className="step-row" key={step.id}>
                   <span className={`step-status ${step.status}`}>
-                    <CheckCircle2 size={16} />
+                    <CheckCircle2 size={16} aria-hidden="true" />
                   </span>
                   <div>
                     <p>{step.label}</p>
@@ -1091,35 +1568,13 @@ export function SprintPlanningWorkflow() {
           </article>
 
           <article className="output-card">
-            <SectionTitle icon={MessageSquare} title="Slack leave request" />
+            <SectionTitle icon={MessageSquare} title="Slack preview" />
             <pre className="preview-box">{slackPreview}</pre>
           </article>
-
-          <article className="output-card">
-            <SectionTitle icon={FileText} title="Jira close and report" />
-            <div className="preview-list">
-              <p>{apiOutput?.jiraCloseReportPreview.closeSprintAction ?? `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}</p>
-              <p>{apiOutput?.jiraCloseReportPreview.reportingAction ?? `Fetch completed story points for ${form.previousSprintName} in ${form.jiraProjectKey}`}</p>
-              <p>Last net velocity: {apiOutput?.jiraCloseReportPreview.lastNetVelocity ?? form.lastNetVelocity}</p>
-            </div>
-          </article>
-
-          <article className="output-card connector-card">
-            <SectionTitle icon={ClipboardCheck} title="Next connector actions" />
-            <p>
-              Jira and Slack are configurable inputs in this screen now. The next backend step is to replace manual
-              values with connector reads for sprint closure, completed story points, and leave collection.
-            </p>
-            <div className="connector-links">
-              <span>Jira API or MCP</span>
-              <ArrowRight size={16} />
-              <span>Planning engine</span>
-              <ArrowRight size={16} />
-              <span>Slack follow-up</span>
-            </div>
-          </article>
         </aside>
-      </section>
+      </Tabs.Root>
+        </>
+      )}
     </main>
   );
 }
@@ -1128,11 +1583,141 @@ function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }
   return (
     <div className="section-title">
       <span>
-        <Icon size={18} />
+        <Icon size={18} aria-hidden="true" />
       </span>
       <h2>{title}</h2>
     </div>
   );
+}
+
+function VelocityHistoryTable({
+  rows,
+  onChange
+}: {
+  rows: VelocityHistoryRow[];
+  onChange: (
+    sprintOffset: VelocityHistoryRow["sprintOffset"],
+    field: keyof Pick<VelocityHistoryRow, "netVelocity">,
+    value: string
+  ) => void;
+}) {
+  return (
+    <div className="velocity-history" aria-describedby="velocity-history-help">
+      <table>
+        <caption>Velocity history used for average</caption>
+        <thead>
+          <tr>
+            <th scope="col">Sprint</th>
+            <th scope="col">Net velocity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.sprintOffset}>
+              <th scope="row">
+                <span>{row.sprintOffset === -1 ? "Last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}</span>
+                <small>
+                  {row.sprintName} · {row.completedStoryPoints} closed SP · {row.leaveDays} leave days ·{" "}
+                  <SourcePill source={row.source} />
+                </small>
+              </th>
+              <td>
+                <input
+                  aria-label={`Net velocity for ${row.sprintOffset === -1 ? "last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}`}
+                  min="0"
+                  onChange={(event) => onChange(row.sprintOffset, "netVelocity", event.target.value)}
+                  step="0.5"
+                  type="number"
+                  value={row.netVelocity}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p id="velocity-history-help">
+        Average is calculated from the three net velocity values. Jira import updates the last closed sprint story
+        points before the SM finalizes the override.
+      </p>
+    </div>
+  );
+}
+
+function LeaveConfirmationsTable({
+  rows,
+  onChange
+}: {
+  rows: LeaveConfirmationRow[];
+  onChange: (
+    slackUserId: string,
+    field: keyof Pick<LeaveConfirmationRow, "previousSprintLeaveDays" | "upcomingSprintLeaveDays">,
+    value: string
+  ) => void;
+}) {
+  return (
+    <div className="leave-confirmations" aria-describedby="leave-confirmations-help">
+      <table>
+        <caption>Slack leave confirmations</caption>
+        <thead>
+          <tr>
+            <th scope="col">Teammate</th>
+            <th scope="col">Previous sprint</th>
+            <th scope="col">Upcoming sprint</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.slackUserId}>
+              <th scope="row">
+                <span>{row.teammateName}</span>
+                <small>
+                  {row.confirmationStatus.replaceAll("_", " ")} · <SourcePill source={row.source} />
+                </small>
+              </th>
+              <td>
+                <input
+                  aria-label={`Previous sprint leave days for ${row.teammateName}`}
+                  min="0"
+                  onChange={(event) => onChange(row.slackUserId, "previousSprintLeaveDays", event.target.value)}
+                  step="0.5"
+                  type="number"
+                  value={row.previousSprintLeaveDays}
+                />
+              </td>
+              <td>
+                <input
+                  aria-label={`Upcoming sprint leave days for ${row.teammateName}`}
+                  min="0"
+                  onChange={(event) => onChange(row.slackUserId, "upcomingSprintLeaveDays", event.target.value)}
+                  step="0.5"
+                  type="number"
+                  value={row.upcomingSprintLeaveDays}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p id="leave-confirmations-help">
+        Table totals update the previous and upcoming sprint leave days used in capacity and Slack previews.
+      </p>
+    </div>
+  );
+}
+
+function SourcePill({ source }: { source: VelocityHistoryRow["source"] | LeaveConfirmationRow["source"] }) {
+  const label =
+    source === "mock-jira-report"
+      ? "Mock Jira"
+      : source === "jira_report"
+        ? "Real Jira"
+        : source === "mock-slack-thread"
+          ? "Mock Slack"
+          : source === "slack_thread"
+            ? "Real Slack"
+            : "Manual";
+
+  return <span className={`source-pill ${source}`}>{label}</span>;
 }
 
 function TextField({
