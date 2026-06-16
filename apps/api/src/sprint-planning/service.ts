@@ -1,4 +1,4 @@
-import type { SprintPlanningInput } from "./schema.js";
+import type { JiraReportingImportInput, SprintPlanningInput } from "./schema.js";
 
 const teamSprintPlanningConfigs = {
   pta: {
@@ -17,6 +17,80 @@ const teamSprintPlanningConfigs = {
     }
   }
 };
+
+const mockJiraVelocityHistory = [
+  {
+    sprintOffset: -3,
+    sprintName: "Q2S4 - 2026",
+    startDate: "2026-05-05",
+    endDate: "2026-05-16",
+    completedStoryPoints: 82,
+    leaveDays: 1,
+    netVelocity: 82,
+    source: "mock-jira-report"
+  },
+  {
+    sprintOffset: -2,
+    sprintName: "Q2S5 - 2026",
+    startDate: "2026-05-19",
+    endDate: "2026-05-30",
+    completedStoryPoints: 88,
+    leaveDays: 2,
+    netVelocity: 88,
+    source: "mock-jira-report"
+  },
+  {
+    sprintOffset: -1,
+    sprintName: "Q2S6 - 2026",
+    startDate: "2026-06-01",
+    endDate: "2026-06-12",
+    completedStoryPoints: 84,
+    leaveDays: 2,
+    netVelocity: 84,
+    source: "mock-jira-report"
+  }
+];
+
+const mockJiraSprintIds: Record<string, string> = {
+  "Q2S4 - 2026": "jira-sprint-204",
+  "Q2S5 - 2026": "jira-sprint-205",
+  "Q2S6 - 2026": "jira-sprint-206"
+};
+
+function withJiraSprintId(row: (typeof mockJiraVelocityHistory)[number]) {
+  return {
+    ...row,
+    jiraSprintId: mockJiraSprintIds[row.sprintName] ?? `mock-${row.sprintName.toLowerCase().replaceAll(" ", "-")}`,
+    includeInAverage: true
+  };
+}
+
+export function createJiraReportingImportPreview(input: JiraReportingImportInput) {
+  const velocityHistory = mockJiraVelocityHistory.map(withJiraSprintId);
+  const lastClosedSprint = velocityHistory.find((row) => row.sprintOffset === -1) ?? velocityHistory[2];
+
+  return {
+    projectKey: input.jiraProjectKey,
+    boardName: input.jiraBoardName,
+    importedAt: new Date().toISOString(),
+    velocityHistory,
+    previousSprintClosedStoryPoints: {
+      sprintName: lastClosedSprint.sprintName,
+      jiraSprintId: lastClosedSprint.jiraSprintId,
+      completedStoryPoints: lastClosedSprint.completedStoryPoints,
+      source: "mock-jira-report"
+    },
+    formPatch: {
+      previousVelocityMinus3: velocityHistory.find((row) => row.sprintOffset === -3)?.netVelocity ?? 0,
+      previousVelocityMinus2: velocityHistory.find((row) => row.sprintOffset === -2)?.netVelocity ?? 0,
+      lastNetVelocity: lastClosedSprint.netVelocity
+    },
+    warnings: [
+      "Using mock Jira reporting data until Jira API or MCP connector is configured.",
+      `Previous sprint requested: ${input.previousSprintName}`
+    ]
+  };
+}
 
 function roundVelocity(value: number) {
   return Math.round(value * 10) / 10;

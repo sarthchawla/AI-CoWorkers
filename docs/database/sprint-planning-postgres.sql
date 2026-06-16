@@ -48,7 +48,7 @@ CREATE TABLE sprint_planning_velocity_history (
   completed_story_points NUMERIC(8, 2) NOT NULL CHECK (completed_story_points >= 0),
   leave_days NUMERIC(8, 2) NOT NULL DEFAULT 0 CHECK (leave_days >= 0),
   net_velocity NUMERIC(8, 2) NOT NULL CHECK (net_velocity >= 0),
-  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'jira_report')),
+  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'mock-jira-report', 'jira_report')),
   include_in_average BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (sprint_planning_session_id, sprint_offset)
@@ -86,7 +86,7 @@ CREATE TABLE sprint_planning_jira_reports (
   jira_report_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   sprint_planning_session_id BIGINT NOT NULL REFERENCES sprint_planning_sessions(sprint_planning_session_id) ON DELETE CASCADE,
   jira_sprint_id TEXT,
-  report_type TEXT NOT NULL CHECK (report_type IN ('closed_story_points', 'sprint_closure')),
+  report_type TEXT NOT NULL CHECK (report_type IN ('mock_closed_story_points', 'closed_story_points', 'sprint_closure')),
   completed_story_points NUMERIC(8, 2) CHECK (completed_story_points >= 0),
   fetched_payload JSONB NOT NULL DEFAULT '{}',
   fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -126,4 +126,3 @@ CREATE INDEX sprint_planning_jira_reports_payload_gin_idx
 
 CREATE INDEX sprint_planning_workflow_steps_session_id_idx
   ON sprint_planning_workflow_steps (sprint_planning_session_id);
-

@@ -119,6 +119,41 @@ export type TeamConfigResponse = {
   data: TeamSprintPlanningConfig;
 };
 
+export type VelocityHistoryRow = {
+  sprintOffset: -3 | -2 | -1;
+  sprintName: string;
+  jiraSprintId?: string;
+  startDate: string;
+  endDate: string;
+  completedStoryPoints: number;
+  leaveDays: number;
+  netVelocity: number;
+  source: "manual" | "mock-jira-report";
+  includeInAverage: boolean;
+};
+
+export type JiraReportingImportResponse = {
+  status: string;
+  data: {
+    projectKey: string;
+    boardName: string;
+    importedAt: string;
+    velocityHistory: VelocityHistoryRow[];
+    previousSprintClosedStoryPoints: {
+      sprintName: string;
+      jiraSprintId: string;
+      completedStoryPoints: number;
+      source: "mock-jira-report";
+    };
+    formPatch: {
+      previousVelocityMinus3: number;
+      previousVelocityMinus2: number;
+      lastNetVelocity: number;
+    };
+    warnings: string[];
+  };
+};
+
 export type PlanningResult = {
   averageNetVelocity: number;
   baselineCapacityDays: number;

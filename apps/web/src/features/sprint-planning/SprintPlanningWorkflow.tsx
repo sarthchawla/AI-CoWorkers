@@ -16,9 +16,13 @@ import {
   Sparkles,
   Table2
 } from "lucide-react";
-import { createSprintPlanningWorkflowDraft, getSprintPlanningTeamConfig } from "./sprintPlanningApi";
+import {
+  createSprintPlanningWorkflowDraft,
+  getJiraVelocityHistory,
+  getSprintPlanningTeamConfig
+} from "./sprintPlanningApi";
 import { calculatePlanning, toNumber, toSprintPlanningInput } from "./sprintPlanningCalculations";
-import type { AutomationStep, DraftResponse, PlanningForm } from "./sprintPlanningTypes";
+import type { AutomationStep, DraftResponse, PlanningForm, VelocityHistoryRow } from "./sprintPlanningTypes";
 
 const initialForm: PlanningForm = {
   teamKey: "pta",
@@ -75,6 +79,42 @@ const workflowSteps: AutomationStep[] = [
     label: "Calculate average net velocity, capacity adjustment, and final team-approved sprint velocity.",
     owner: "AI Scrum Master",
     status: "ready"
+  }
+];
+
+const initialVelocityHistory: VelocityHistoryRow[] = [
+  {
+    sprintOffset: -3,
+    sprintName: "Q2S4 - 2026",
+    startDate: "2026-05-05",
+    endDate: "2026-05-16",
+    completedStoryPoints: 82,
+    leaveDays: 1,
+    netVelocity: 82,
+    source: "manual",
+    includeInAverage: true
+  },
+  {
+    sprintOffset: -2,
+    sprintName: "Q2S5 - 2026",
+    startDate: "2026-05-19",
+    endDate: "2026-05-30",
+    completedStoryPoints: 88,
+    leaveDays: 2,
+    netVelocity: 88,
+    source: "manual",
+    includeInAverage: true
+  },
+  {
+    sprintOffset: -1,
+    sprintName: "Q2S6 - 2026",
+    startDate: "2026-06-01",
+    endDate: "2026-06-12",
+    completedStoryPoints: 84,
+    leaveDays: 2,
+    netVelocity: 84,
+    source: "manual",
+    includeInAverage: true
   }
 ];
 
@@ -140,6 +180,7 @@ function fallbackSlackPreview(form: PlanningForm) {
 
 export function SprintPlanningWorkflow() {
   const [form, setForm] = useState(initialForm);
+  const [velocityHistory, setVelocityHistory] = useState(initialVelocityHistory);
   const [draftStatus, setDraftStatus] = useState("Not synced with API yet");
   const [apiPlan, setApiPlan] = useState<DraftResponse["data"] | null>(null);
   const planning = useMemo(() => calculatePlanning(form), [form]);
@@ -159,6 +200,40 @@ export function SprintPlanningWorkflow() {
       ...current,
       [field]: toNumber(value)
     }));
+  }
+
+  function patchVelocityFields(rows: VelocityHistoryRow[]) {
+    setForm((current) => ({
+      ...current,
+      previousVelocityMinus3:
+        rows.find((row) => row.sprintOffset === -3)?.netVelocity ?? current.previousVelocityMinus3,
+      previousVelocityMinus2:
+        rows.find((row) => row.sprintOffset === -2)?.netVelocity ?? current.previousVelocityMinus2,
+      lastNetVelocity: rows.find((row) => row.sprintOffset === -1)?.netVelocity ?? current.lastNetVelocity,
+      previousSprintLeaveDays:
+        rows.find((row) => row.sprintOffset === -1)?.leaveDays ?? current.previousSprintLeaveDays
+    }));
+  }
+
+  function updateVelocityHistory(
+    sprintOffset: VelocityHistoryRow["sprintOffset"],
+    field: keyof Pick<VelocityHistoryRow, "netVelocity">,
+    value: string
+  ) {
+    const nextRows = velocityHistory.map((row) => {
+      if (row.sprintOffset !== sprintOffset) {
+        return row;
+      }
+
+      return {
+        ...row,
+        [field]: toNumber(value),
+        source: "manual" as const
+      };
+    });
+
+    setVelocityHistory(nextRows);
+    patchVelocityFields(nextRows);
   }
 
   async function generateDraft() {
@@ -193,6 +268,31 @@ export function SprintPlanningWorkflow() {
       setDraftStatus("Team config loaded from backend defaults");
     } catch {
       setDraftStatus("Team config unavailable; keep editing local values");
+    }
+  }
+
+  async function importJiraVelocityHistory() {
+    setDraftStatus("Importing velocity history from Jira reporting...");
+
+    try {
+      const payload = await getJiraVelocityHistory({
+        teamKey: form.teamKey,
+        jiraProjectKey: form.jiraProjectKey,
+        jiraBoardName: form.jiraBoardName,
+        previousSprintName: form.previousSprintName
+      });
+      const rows = payload.data.velocityHistory;
+
+      setVelocityHistory(rows);
+      setForm((current) => ({
+        ...current,
+        ...payload.data.formPatch,
+        previousSprintLeaveDays:
+          rows.find((row) => row.sprintOffset === -1)?.leaveDays ?? current.previousSprintLeaveDays
+      }));
+      setDraftStatus("Imported last three sprint velocities from Jira reporting");
+    } catch {
+      setDraftStatus("Jira reporting import unavailable; keep editing velocity rows");
     }
   }
 
@@ -358,22 +458,55 @@ export function SprintPlanningWorkflow() {
           </div>
 
           <SectionTitle icon={Table2} title="Velocity and capacity" />
-          <div className="field-grid">
-            <NumberField
-              label="Pre-previous velocity (-3)"
-              value={form.previousVelocityMinus3}
-              onChange={(value) => updateNumber("previousVelocityMinus3", value)}
-            />
-            <NumberField
-              label="Previous velocity (-2)"
-              value={form.previousVelocityMinus2}
-              onChange={(value) => updateNumber("previousVelocityMinus2", value)}
-            />
-            <NumberField
-              label="Last net velocity (-1)"
-              value={form.lastNetVelocity}
-              onChange={(value) => updateNumber("lastNetVelocity", value)}
-            />
+          <div className="inline-actions">
+            <button className="inline-action" type="button" onClick={importJiraVelocityHistory}>
+              <Table2 size={16} />
+              Import Jira velocity history
+            </button>
+          </div>
+          <div className="velocity-history" aria-describedby="velocity-history-help">
+            <table>
+              <caption>Velocity history used for average</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Sprint</th>
+                  <th scope="col">Net velocity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {velocityHistory.map((row) => (
+                  <tr key={row.sprintOffset}>
+                    <th scope="row">
+                      <span>{row.sprintOffset === -1 ? "Last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}</span>
+                      <small>
+                        {row.sprintName} · {row.completedStoryPoints} closed SP · {row.leaveDays} leave days ·{" "}
+                        <span className={`source-pill ${row.source}`}>
+                          {row.source === "mock-jira-report" ? "Mock Jira" : "Manual"}
+                        </span>
+                      </small>
+                    </th>
+                    <td>
+                      <input
+                        min="0"
+                        step="0.5"
+                        type="number"
+                        value={row.netVelocity}
+                        aria-label={`Net velocity for ${row.sprintOffset === -1 ? "last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}`}
+                        onChange={(event) =>
+                          updateVelocityHistory(row.sprintOffset, "netVelocity", event.target.value)
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p id="velocity-history-help">
+              Average is calculated from the three net velocity values. Jira import updates the last closed sprint
+              story points before the SM finalizes the override.
+            </p>
+          </div>
+          <div className="field-grid velocity-controls">
             <NumberField
               label="Previous sprint leave days"
               value={form.previousSprintLeaveDays}

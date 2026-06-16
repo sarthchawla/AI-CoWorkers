@@ -43,6 +43,12 @@ Current manual flow:
 
 The web app now starts with a Sprint Planning workbench for these inputs and outputs. Jira and Slack are represented as configurable team inputs today, with connector-backed automation planned next.
 
+Current preview APIs:
+
+- `GET /api/coworkers/scrum-master/sprint-planning/team-config/:teamKey`
+- `POST /api/coworkers/scrum-master/sprint-planning/jira-reporting/import-preview`
+- `POST /api/coworkers/scrum-master/sprint-planning/workflow-draft`
+
 ## Product Direction
 
 The app is intentionally structured around Agoda-style Jira usage first, while keeping the core abstractions portable enough to support other engineering organizations later.

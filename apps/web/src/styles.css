@@ -309,6 +309,103 @@ h1 {
   box-shadow: 0 0 0 3px rgba(42, 104, 112, 0.13);
 }
 
+.velocity-history {
+  margin-bottom: 22px;
+  border: 1px solid #dbe1db;
+  border-radius: 8px;
+  background: #fbfcf8;
+}
+
+.velocity-history table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.velocity-history caption {
+  padding: 14px 14px 6px;
+  color: #172033;
+  font-size: 0.92rem;
+  font-weight: 850;
+  text-align: left;
+}
+
+.velocity-history th,
+.velocity-history td {
+  padding: 12px 14px;
+  border-top: 1px solid #edf0ea;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.velocity-history thead th {
+  color: #596273;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.velocity-history tbody th {
+  width: 70%;
+  font-weight: 750;
+}
+
+.velocity-history small {
+  display: block;
+  margin-top: 5px;
+  color: #596273;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.velocity-history input[type="number"] {
+  width: 112px;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid #cdd5cf;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #182033;
+  text-align: right;
+}
+
+.velocity-history p {
+  margin: 0;
+  padding: 0 14px 14px;
+  color: #596273;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+}
+
+.checkbox-field input {
+  width: 18px;
+  height: 18px;
+  accent-color: #285e64;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef5f4;
+  color: #285e64;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.source-pill.manual {
+  background: #f4efe6;
+  color: #6c4a1f;
+}
+
 .output-column {
   display: grid;
   align-self: start;

@@ -11,5 +11,6 @@ It covers:
 - Jira report snapshots for closed story points and sprint closure.
 - Final velocity calculations and workflow checklist state.
 
-The app does not connect to a database yet. This is the target schema for the next backend milestone.
+The current app uses `mock-jira-report` as the source for preview imports. Real Jira API or MCP imports should write `jira_report`.
 
+The app does not connect to a database yet. This is the target schema for the next backend milestone.

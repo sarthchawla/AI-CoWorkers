@@ -30,3 +30,14 @@ export const sprintPlanningSchema = z.object({
 });
 
 export type SprintPlanningInput = z.infer<typeof sprintPlanningSchema>;
+
+export const jiraReportingImportSchema = z.object({
+  teamKey: z.string().optional(),
+  jiraProjectKey: z.string().min(1),
+  jiraBoardName: z.string().min(1),
+  previousSprintName: z.string().min(1),
+  currentSprintName: z.string().optional(),
+  sprintCount: z.literal(3)
+});
+
+export type JiraReportingImportInput = z.infer<typeof jiraReportingImportSchema>;
