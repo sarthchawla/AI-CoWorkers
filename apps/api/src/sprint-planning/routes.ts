@@ -4,10 +4,12 @@ import {
   jiraReportingImportSchema,
   slackLeaveConfirmationImportSchema,
   sprintPlanningSchema,
+  sprintPlanningSessionCloneSchema,
   sprintPlanningSessionSaveSchema,
   teamSprintPlanningConfigSchema
 } from "./schema.js";
 import {
+  cloneSprintPlanningSession,
   getSprintPlanningSession,
   listSprintPlanningSessions,
   runSprintPlanningConnectorAction,
@@ -109,6 +111,38 @@ sprintPlanningRouter.post("/sessions", async (request, response, next) => {
     response.json({
       status: "success",
       data: await saveSprintPlanningSession(parsedInput.data)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+sprintPlanningRouter.post("/sessions/:sessionId/clone", async (request, response, next) => {
+  const parsedInput = sprintPlanningSessionCloneSchema.safeParse(request.body ?? {});
+
+  if (!parsedInput.success) {
+    response.status(400).json({
+      status: "error",
+      message: "Invalid sprint planning clone input",
+      errors: parsedInput.error.flatten()
+    });
+    return;
+  }
+
+  try {
+    const session = await cloneSprintPlanningSession(request.params.sessionId, parsedInput.data);
+
+    if (!session) {
+      response.status(404).json({
+        status: "error",
+        message: "Sprint planning session not found for clone"
+      });
+      return;
+    }
+
+    response.json({
+      status: "success",
+      data: session
     });
   } catch (error) {
     next(error);

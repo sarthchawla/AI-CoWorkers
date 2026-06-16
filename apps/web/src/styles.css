@@ -276,6 +276,7 @@ h1 {
 
 .session-actions button,
 .session-browser-header button,
+.session-row-actions button,
 .connector-action-buttons button {
   display: inline-flex;
   align-items: center;
@@ -291,6 +292,7 @@ h1 {
 }
 
 .session-actions button:disabled,
+.session-row-actions button:disabled,
 .connector-action-buttons button:disabled {
   cursor: not-allowed;
   opacity: 0.54;
@@ -368,7 +370,7 @@ h1 {
   color: #596273;
 }
 
-.session-list button {
+.session-list-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -383,9 +385,22 @@ h1 {
   text-align: left;
 }
 
-.session-list button:hover,
-.session-list button:focus-visible,
+.session-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.session-row-actions button:last-child {
+  border-color: #2a6870;
+  background: #eef5f4;
+  color: #174c52;
+}
+
+.session-list-row:hover,
 .session-actions button:focus-visible,
+.session-row-actions button:focus-visible,
 .connector-action-buttons button:focus-visible,
 .session-browser-header button:focus-visible,
 .status-select select:focus-visible {
@@ -797,9 +812,16 @@ h1 {
   }
 
   .session-browser-header,
-  .session-list button {
+  .session-list-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .session-row-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+    width: 100%;
   }
 
   .session-meta {

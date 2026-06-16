@@ -87,6 +87,18 @@ export const sprintPlanningSessionSaveSchema = z.object({
 
 export type SprintPlanningSessionSaveInput = z.infer<typeof sprintPlanningSessionSaveSchema>;
 
+export const sprintPlanningSessionCloneSchema = z.object({
+  currentSprintName: z.string().min(1).optional(),
+  currentSprintDates: z
+    .object({
+      start: z.string().min(1),
+      end: z.string().min(1)
+    })
+    .optional()
+});
+
+export type SprintPlanningSessionCloneInput = z.infer<typeof sprintPlanningSessionCloneSchema>;
+
 export const jiraReportingImportSchema = z.object({
   teamKey: z.string().optional(),
   jiraProjectKey: z.string().min(1),

@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSprintPlanningConnectorModeLabel } from "../connectors/connectorEnvironment.js";
-import type { SprintPlanningSessionSaveInput } from "./schema.js";
+import type { SprintPlanningSessionCloneInput, SprintPlanningSessionSaveInput } from "./schema.js";
 import {
   calculateSprintPlanning,
   createJiraReportingImportPreview,
@@ -89,6 +89,86 @@ function createSessionId(input: SprintPlanningSessionSaveInput) {
   return `${slug || "sprint-planning"}-${Date.now().toString(36)}`;
 }
 
+function addDays(dateValue: string, days: number) {
+  const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    return dateValue;
+  }
+
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return date.toISOString().slice(0, 10);
+}
+
+function nextSprintName(previousSprintName: string) {
+  const match = previousSprintName.match(/^Q(\d+)S(\d+)\s*-\s*(\d{4})$/i);
+
+  if (!match) {
+    return `${previousSprintName} copy`;
+  }
+
+  return `Q${match[1]}S${Number(match[2]) + 1} - ${match[3]}`;
+}
+
+function cloneVelocityHistory(session: SprintPlanningSession, currentSprintName: string) {
+  const previousRows = session.velocityHistory;
+  const minus2 = previousRows.find((row) => row.sprintOffset === -2);
+  const minus1 = previousRows.find((row) => row.sprintOffset === -1);
+
+  return [
+    minus2
+      ? {
+          ...minus2,
+          sprintOffset: -3 as const,
+          source: "manual" as const
+        }
+      : {
+          sprintOffset: -3 as const,
+          sprintName: session.input.previousSprintName,
+          startDate: session.input.previousSprintDates.start,
+          endDate: session.input.previousSprintDates.end,
+          completedStoryPoints: session.input.previousVelocityMinus2,
+          leaveDays: session.input.previousSprintLeaveDays,
+          netVelocity: session.input.previousVelocityMinus2,
+          source: "manual" as const,
+          includeInAverage: true
+        },
+    minus1
+      ? {
+          ...minus1,
+          sprintOffset: -2 as const,
+          source: "manual" as const
+        }
+      : {
+          sprintOffset: -2 as const,
+          sprintName: session.input.currentSprintName,
+          startDate: session.input.currentSprintDates.start,
+          endDate: session.input.currentSprintDates.end,
+          completedStoryPoints: session.input.lastNetVelocity,
+          leaveDays: session.input.upcomingSprintLeaveDays,
+          netVelocity: session.input.lastNetVelocity,
+          source: "manual" as const,
+          includeInAverage: true
+        },
+    {
+      sprintOffset: -1 as const,
+      sprintName: session.input.currentSprintName,
+      startDate: session.input.currentSprintDates.start,
+      endDate: session.input.currentSprintDates.end,
+      completedStoryPoints: session.input.lastNetVelocity,
+      leaveDays: session.input.upcomingSprintLeaveDays,
+      netVelocity: session.input.lastNetVelocity,
+      source: "manual" as const,
+      includeInAverage: true
+    }
+  ].map((row) => ({
+    ...row,
+    sprintName: row.sprintOffset === -1 ? session.input.currentSprintName : row.sprintName || currentSprintName
+  }));
+}
+
 export function serializeSprintPlanningSession(session: SprintPlanningSession) {
   const actionResults = session.connectorActions ?? [];
   const completedActionKeys = new Set(actionResults.map((action) => action.actionKey));
@@ -163,6 +243,63 @@ export async function saveSprintPlanningSession(input: SprintPlanningSessionSave
     ? store.sessions.map((session) => (session.sessionId === sessionId ? nextSession : session))
     : [...store.sessions, nextSession];
 
+  await writeStore(store);
+
+  return serializeSprintPlanningSession(nextSession);
+}
+
+export async function cloneSprintPlanningSession(sessionId: string, input: SprintPlanningSessionCloneInput) {
+  const store = await readStore();
+  const existingSession = store.sessions.find((session) => session.sessionId === sessionId);
+
+  if (!existingSession) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const currentSprintName = input.currentSprintName ?? nextSprintName(existingSession.input.currentSprintName);
+  const currentSprintDates = input.currentSprintDates ?? {
+    start: addDays(existingSession.input.currentSprintDates.start, 14),
+    end: addDays(existingSession.input.currentSprintDates.end, 14)
+  };
+  const velocityHistory = cloneVelocityHistory(existingSession, currentSprintName);
+  const nextInput = {
+    ...existingSession.input,
+    previousSprintName: existingSession.input.currentSprintName,
+    currentSprintName,
+    previousSprintDates: existingSession.input.currentSprintDates,
+    currentSprintDates,
+    previousVelocityMinus3:
+      velocityHistory.find((row) => row.sprintOffset === -3)?.netVelocity ??
+      existingSession.input.previousVelocityMinus2,
+    previousVelocityMinus2:
+      velocityHistory.find((row) => row.sprintOffset === -2)?.netVelocity ??
+      existingSession.input.lastNetVelocity,
+    lastNetVelocity:
+      velocityHistory.find((row) => row.sprintOffset === -1)?.netVelocity ?? existingSession.input.lastNetVelocity,
+    previousSprintLeaveDays:
+      velocityHistory.find((row) => row.sprintOffset === -1)?.leaveDays ?? existingSession.input.upcomingSprintLeaveDays,
+    upcomingSprintLeaveDays: 0,
+    manualVelocityOverride: null,
+    velocityOverrideReason: ""
+  };
+  const nextSession: SprintPlanningSession = {
+    sessionId: createSessionId({
+      planningStatus: "draft",
+      input: nextInput,
+      velocityHistory,
+      leaveConfirmations: []
+    }),
+    planningStatus: "draft",
+    input: nextInput,
+    velocityHistory,
+    leaveConfirmations: [],
+    connectorActions: [],
+    createdAt: now,
+    updatedAt: now
+  };
+
+  store.sessions = [...store.sessions, nextSession];
   await writeStore(store);
 
   return serializeSprintPlanningSession(nextSession);

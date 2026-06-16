@@ -165,6 +165,23 @@ export async function saveSprintPlanningSession(input: {
   return payload;
 }
 
+export async function cloneSprintPlanningSession(sessionId: string) {
+  const response = await fetch(`/api/coworkers/scrum-master/sprint-planning/sessions/${sessionId}/clone`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({})
+  });
+  const payload = (await response.json()) as SavedSprintPlanningSessionResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.status || "Saved sprint planning session clone failed");
+  }
+
+  return payload;
+}
+
 export async function runSprintPlanningConnectorAction(
   sessionId: string,
   actionKey: SprintPlanningConnectorActionKey

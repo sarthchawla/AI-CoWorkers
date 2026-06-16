@@ -61,6 +61,7 @@ Current preview APIs:
 - `GET /api/coworkers/scrum-master/sprint-planning/sessions?teamKey=pta`
 - `GET /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId`
 - `POST /api/coworkers/scrum-master/sprint-planning/sessions`
+- `POST /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId/clone`
 - `POST /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId/connector-actions/:actionKey/run`
 - `POST /api/coworkers/scrum-master/sprint-planning/jira-reporting/import-preview`
 - `POST /api/coworkers/scrum-master/sprint-planning/slack/leave-confirmations/import-preview`

@@ -19,6 +19,7 @@ import {
   Table2
 } from "lucide-react";
 import {
+  cloneSprintPlanningSession,
   createSprintPlanningWorkflowDraft,
   getSprintPlanningSession,
   getJiraVelocityHistory,
@@ -585,6 +586,28 @@ export function SprintPlanningWorkflow() {
     }
   }
 
+  async function cloneSavedSession(sourceSessionId: string) {
+    if (isDirty) {
+      setDraftStatus("Save changes before cloning a sprint planning session");
+      return;
+    }
+
+    if (isConnectorRunning) {
+      setDraftStatus("Wait for the connector action to finish before cloning a sprint planning session");
+      return;
+    }
+
+    setDraftStatus("Creating next sprint planning session from saved context...");
+
+    try {
+      const payload = await cloneSprintPlanningSession(sourceSessionId);
+      hydrateSavedSession(payload.data, `Created ${payload.data.input.currentSprintName} from previous sprint context`);
+      setIsSessionBrowserOpen(false);
+    } catch {
+      setDraftStatus("Saved session clone failed");
+    }
+  }
+
   async function runSavedConnectorAction(actionKey: SprintPlanningConnectorActionKey) {
     if (sessionId == null) {
       setDraftStatus("Save this planning session before running connectors");
@@ -629,6 +652,7 @@ export function SprintPlanningWorkflow() {
   const summaryVelocity = apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
   const sessionLabel = sessionId == null ? "New planning session" : `${form.currentSprintName} saved draft`;
   const lastSavedLabel = lastSavedAt === "" ? "Not saved yet" : `Last saved ${new Date(lastSavedAt).toLocaleString()}`;
+  const cloneDisabled = isDirty || isConnectorRunning;
   const connectorActionsDisabled = sessionId == null || isDirty || isConnectorRunning;
 
   return (
@@ -755,7 +779,7 @@ export function SprintPlanningWorkflow() {
           <div className="session-browser-header">
             <div>
               <span className="panel-kicker">Saved sessions</span>
-              <h2 id="session-browser-title">Open sprint planning session</h2>
+              <h2 id="session-browser-title">Open or clone sprint planning session</h2>
             </div>
             <button type="button" onClick={() => setIsSessionBrowserOpen(false)}>
               Close
@@ -766,7 +790,7 @@ export function SprintPlanningWorkflow() {
               <p>No saved sprint planning sessions for {form.teamKey} yet.</p>
             ) : (
               savedSessions.map((session) => (
-                <button type="button" key={session.sessionId} onClick={() => loadSession(session.sessionId)}>
+                <article className="session-list-row" key={session.sessionId}>
                   <span>
                     <strong>{session.currentSprintName}</strong>
                     <small>
@@ -782,7 +806,21 @@ export function SprintPlanningWorkflow() {
                       steps
                     </small>
                   </span>
-                </button>
+                  <span className="session-row-actions">
+                    <button type="button" onClick={() => loadSession(session.sessionId)}>
+                      <FolderOpen size={16} />
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cloneSavedSession(session.sessionId)}
+                      disabled={cloneDisabled}
+                    >
+                      <Copy size={16} />
+                      Clone to new sprint
+                    </button>
+                  </span>
+                </article>
               ))
             )}
           </div>
