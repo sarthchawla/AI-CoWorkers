@@ -6,7 +6,7 @@ import { z } from "zod";
 dotenv.config();
 
 const app = express();
-const port = Number(process.env.PORT ?? 4000);
+const port = Number(process.env.PORT ?? 4100);
 
 const ceremonySchema = z.enum([
   "grooming",
@@ -58,4 +58,3 @@ app.post("/api/coworkers/scrum-master/ceremonies/:ceremony/run", (request, respo
 app.listen(port, () => {
   console.log(`AI CoWorkers API listening on http://localhost:${port}`);
 });
-

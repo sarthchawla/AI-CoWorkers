@@ -55,9 +55,8 @@ pnpm install
 pnpm dev
 ```
 
-The web app runs on `http://localhost:5173` and the API runs on `http://localhost:4000` by default.
+The web app runs on `http://localhost:5173` and the API runs on `http://localhost:4100` by default.
 
 ## Current Status
 
 This is the initial project scaffold. The first milestone is to make the Scrum Master coworker useful for Jira-backed sprint planning and tracking.
-
