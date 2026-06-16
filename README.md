@@ -43,12 +43,23 @@ Current manual flow:
 
 The web app now starts with a Sprint Planning workbench for these inputs and outputs. Jira and Slack are represented as configurable team inputs today, with connector-backed automation planned next.
 
+## Mock Connector Environment
+
+Set `SPRINT_PLANNING_CONNECTOR_MODE=mock` to run Sprint Planning without real Jira or Slack access. In mock mode, the API uses fixture data for:
+
+- Jira sprint IDs, closed story points, and the last three sprint velocities.
+- Slack leave-confirmation responses, including confirmed, pending, and Scrum Master-adjusted rows.
+- Saved-session connector actions for closing the previous sprint, fetching story points, and collecting leave updates.
+
+This keeps the web workflow testable while Jira API/MCP and Slack API/MCP adapters are still pending.
+
 Current preview APIs:
 
 - `GET /api/coworkers/scrum-master/sprint-planning/team-config/:teamKey`
 - `GET /api/coworkers/scrum-master/sprint-planning/sessions?teamKey=pta`
 - `GET /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId`
 - `POST /api/coworkers/scrum-master/sprint-planning/sessions`
+- `POST /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId/connector-actions/:actionKey/run`
 - `POST /api/coworkers/scrum-master/sprint-planning/jira-reporting/import-preview`
 - `POST /api/coworkers/scrum-master/sprint-planning/slack/leave-confirmations/import-preview`
 - `POST /api/coworkers/scrum-master/sprint-planning/workflow-draft`

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import {
   jiraReportingImportSchema,
   slackLeaveConfirmationImportSchema,
@@ -9,6 +9,7 @@ import {
 import {
   getSprintPlanningSession,
   listSprintPlanningSessions,
+  runSprintPlanningConnectorAction,
   saveSprintPlanningSession
 } from "./sessionRepository.js";
 import {
@@ -82,6 +83,46 @@ sprintPlanningRouter.post("/sessions", async (request, response, next) => {
     next(error);
   }
 });
+
+sprintPlanningRouter.post(
+  "/sessions/:sessionId/connector-actions/:actionKey/run",
+  async (request: Request, response: Response, next: NextFunction) => {
+    const sessionId = String(request.params.sessionId);
+    const actionKey = request.params.actionKey;
+
+    if (
+      actionKey !== "collect-leaves" &&
+      actionKey !== "close-previous-sprint" &&
+      actionKey !== "fetch-closed-story-points"
+    ) {
+      response.status(400).json({
+        status: "error",
+        message: "Unsupported sprint planning connector action",
+        supportedActions: ["collect-leaves", "close-previous-sprint", "fetch-closed-story-points"]
+      });
+      return;
+    }
+
+    try {
+      const result = await runSprintPlanningConnectorAction(sessionId, actionKey);
+
+      if (!result) {
+        response.status(404).json({
+          status: "error",
+          message: "Sprint planning session not found for connector action"
+        });
+        return;
+      }
+
+      response.json({
+        status: "success",
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 sprintPlanningRouter.post("/jira-reporting/import-preview", (request, response) => {
   const parsedInput = jiraReportingImportSchema.safeParse(request.body);

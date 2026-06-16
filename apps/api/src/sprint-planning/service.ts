@@ -1,104 +1,11 @@
 import type { JiraReportingImportInput, SlackLeaveConfirmationImportInput, SprintPlanningInput } from "./schema.js";
-
-const teamSprintPlanningConfigs = {
-  pta: {
-    teamKey: "pta",
-    teamName: "PTA",
-    jira: {
-      projectKey: "PTATPA",
-      boardName: "PTA Sprint Board"
-    },
-    slack: {
-      channelName: "#pta-sprint-planning"
-    },
-    defaults: {
-      teamMemberCount: 5,
-      daysInSprintExcludingHolidays: 10
-    }
-  }
-};
-
-const mockJiraVelocityHistory = [
-  {
-    sprintOffset: -3,
-    sprintName: "Q2S4 - 2026",
-    startDate: "2026-05-05",
-    endDate: "2026-05-16",
-    completedStoryPoints: 82,
-    leaveDays: 1,
-    netVelocity: 82,
-    source: "mock-jira-report"
-  },
-  {
-    sprintOffset: -2,
-    sprintName: "Q2S5 - 2026",
-    startDate: "2026-05-19",
-    endDate: "2026-05-30",
-    completedStoryPoints: 88,
-    leaveDays: 2,
-    netVelocity: 88,
-    source: "mock-jira-report"
-  },
-  {
-    sprintOffset: -1,
-    sprintName: "Q2S6 - 2026",
-    startDate: "2026-06-01",
-    endDate: "2026-06-12",
-    completedStoryPoints: 84,
-    leaveDays: 2,
-    netVelocity: 84,
-    source: "mock-jira-report"
-  }
-];
-
-const mockJiraSprintIds: Record<string, string> = {
-  "Q2S4 - 2026": "jira-sprint-204",
-  "Q2S5 - 2026": "jira-sprint-205",
-  "Q2S6 - 2026": "jira-sprint-206"
-};
-
-const mockSlackLeaveConfirmations = [
-  {
-    teammateName: "Anika",
-    slackUserId: "U-ANIKA",
-    previousSprintLeaveDays: 0,
-    upcomingSprintLeaveDays: 1,
-    confirmationStatus: "confirmed",
-    source: "mock-slack-thread"
-  },
-  {
-    teammateName: "Dev",
-    slackUserId: "U-DEV",
-    previousSprintLeaveDays: 1,
-    upcomingSprintLeaveDays: 0,
-    confirmationStatus: "confirmed",
-    source: "mock-slack-thread"
-  },
-  {
-    teammateName: "Mei",
-    slackUserId: "U-MEI",
-    previousSprintLeaveDays: 0.5,
-    upcomingSprintLeaveDays: 1,
-    confirmationStatus: "updated_by_sm",
-    source: "mock-slack-thread"
-  },
-  {
-    teammateName: "Ravi",
-    slackUserId: "U-RAVI",
-    previousSprintLeaveDays: 0,
-    upcomingSprintLeaveDays: 0,
-    confirmationStatus: "pending",
-    source: "mock-slack-thread"
-  },
-  {
-    teammateName: "Sara",
-    slackUserId: "U-SARA",
-    previousSprintLeaveDays: 0.5,
-    upcomingSprintLeaveDays: 1,
-    confirmationStatus: "confirmed",
-    source: "mock-slack-thread"
-  }
-];
+import { getSprintPlanningConnectorModeLabel } from "../connectors/connectorEnvironment.js";
+import {
+  mockJiraSprintIds,
+  mockJiraVelocityHistory,
+  mockSlackLeaveConfirmations,
+  mockTeamSprintPlanningConfigs
+} from "../connectors/mockSprintPlanningData.js";
 
 function withJiraSprintId(row: (typeof mockJiraVelocityHistory)[number]) {
   return {
@@ -129,7 +36,7 @@ export function createJiraReportingImportPreview(input: JiraReportingImportInput
       lastNetVelocity: lastClosedSprint.netVelocity
     },
     warnings: [
-      "Using mock Jira reporting data until Jira API or MCP connector is configured.",
+      `Using ${getSprintPlanningConnectorModeLabel()} Jira reporting data until Jira API or MCP connector is configured.`,
       `Previous sprint requested: ${input.previousSprintName}`
     ]
   };
@@ -159,7 +66,7 @@ export function createSlackLeaveConfirmationImportPreview(input: SlackLeaveConfi
       upcomingSprintLeaveDays
     },
     warnings: [
-      "Using mock Slack thread data until Slack API or MCP connector is configured.",
+      `Using ${getSprintPlanningConnectorModeLabel()} Slack thread data until Slack API or MCP connector is configured.`,
       `Slack channel requested: ${input.slackChannel}`
     ]
   };
@@ -280,5 +187,8 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
 }
 
 export function getTeamSprintPlanningConfig(teamKey: string) {
-  return teamSprintPlanningConfigs[teamKey as keyof typeof teamSprintPlanningConfigs] ?? teamSprintPlanningConfigs.pta;
+  return (
+    mockTeamSprintPlanningConfigs[teamKey as keyof typeof mockTeamSprintPlanningConfigs] ??
+    mockTeamSprintPlanningConfigs.pta
+  );
 }

@@ -221,6 +221,7 @@ h1 {
 .session-strip {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
@@ -274,7 +275,8 @@ h1 {
 }
 
 .session-actions button,
-.session-browser-header button {
+.session-browser-header button,
+.connector-action-buttons button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -288,10 +290,48 @@ h1 {
   font-weight: 800;
 }
 
+.session-actions button:disabled,
+.connector-action-buttons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+}
+
 .session-actions button:first-child {
   border-color: #111827;
   background: #111827;
   color: #ffffff;
+}
+
+.session-connector-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-basis: 100%;
+  padding-top: 14px;
+  border-top: 1px solid #edf0ea;
+}
+
+.session-connector-actions small {
+  display: block;
+  max-width: 560px;
+  margin-top: 4px;
+  color: #596273;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.connector-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.connector-action-buttons button:last-child {
+  border-color: #2a6870;
+  background: #eef5f4;
+  color: #174c52;
 }
 
 .session-browser {
@@ -346,6 +386,7 @@ h1 {
 .session-list button:hover,
 .session-list button:focus-visible,
 .session-actions button:focus-visible,
+.connector-action-buttons button:focus-visible,
 .session-browser-header button:focus-visible,
 .status-select select:focus-visible {
   border-color: #2a6870;
@@ -635,6 +676,10 @@ h1 {
   background: #2f7462;
 }
 
+.step-status.done {
+  background: #256d3d;
+}
+
 .step-status.connector-pending {
   background: #946331;
 }
@@ -710,6 +755,15 @@ h1 {
     justify-content: flex-start;
   }
 
+  .session-connector-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .connector-action-buttons {
+    justify-content: flex-start;
+  }
+
   .velocity-panel {
     width: 100%;
   }
@@ -751,6 +805,12 @@ h1 {
   .session-meta {
     justify-items: start;
     min-width: 0;
+  }
+
+  .connector-action-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .velocity-panel strong {

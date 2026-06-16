@@ -6,6 +6,8 @@ import type {
   SavedSprintPlanningSessionResponse,
   SavedSprintPlanningSessionsResponse,
   SlackLeaveConfirmationImportResponse,
+  SprintPlanningConnectorActionKey,
+  SprintPlanningConnectorActionResponse,
   SprintPlanningInput,
   TeamConfigResponse,
   VelocityHistoryRow
@@ -137,6 +139,25 @@ export async function saveSprintPlanningSession(input: {
 
   if (!response.ok) {
     throw new Error(payload.status || "Saved sprint planning session save failed");
+  }
+
+  return payload;
+}
+
+export async function runSprintPlanningConnectorAction(
+  sessionId: string,
+  actionKey: SprintPlanningConnectorActionKey
+) {
+  const response = await fetch(
+    `/api/coworkers/scrum-master/sprint-planning/sessions/${sessionId}/connector-actions/${actionKey}/run`,
+    {
+      method: "POST"
+    }
+  );
+  const payload = (await response.json()) as SprintPlanningConnectorActionResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.status || "Saved session connector action failed");
   }
 
   return payload;

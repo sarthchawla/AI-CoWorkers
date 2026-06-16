@@ -56,7 +56,7 @@ export type AutomationStep = {
   id: string;
   label: string;
   owner: string;
-  status: "ready" | "connector-pending" | "team-input" | "replaced-by-app";
+  status: "ready" | "connector-pending" | "team-input" | "replaced-by-app" | "done";
 };
 
 export type DraftResponse = {
@@ -190,6 +190,21 @@ export type PlanningResult = {
 
 export type PlanningStatus = "draft" | "ready_for_review" | "finalized" | "published";
 
+export type SprintPlanningConnectorActionKey =
+  | "collect-leaves"
+  | "close-previous-sprint"
+  | "fetch-closed-story-points";
+
+export type SprintPlanningConnectorActionResult = {
+  actionKey: SprintPlanningConnectorActionKey;
+  connector: "jira" | "slack";
+  mode: "mock";
+  status: "done";
+  ranAt: string;
+  output: Record<string, unknown>;
+  warnings: string[];
+};
+
 export type SavedSprintPlanningSessionSummary = {
   sessionId: string;
   teamKey?: string;
@@ -213,6 +228,7 @@ export type SavedSprintPlanningSession = {
   input: SprintPlanningInput;
   velocityHistory: VelocityHistoryRow[];
   leaveConfirmations: LeaveConfirmationRow[];
+  connectorActions: SprintPlanningConnectorActionResult[];
   output: NonNullable<DraftResponse["data"]>["output"];
   createdAt: string;
   updatedAt: string;
@@ -226,4 +242,12 @@ export type SavedSprintPlanningSessionsResponse = {
 export type SavedSprintPlanningSessionResponse = {
   status: string;
   data: SavedSprintPlanningSession;
+};
+
+export type SprintPlanningConnectorActionResponse = {
+  status: string;
+  data: {
+    session: SavedSprintPlanningSession;
+    action: SprintPlanningConnectorActionResult;
+  };
 };

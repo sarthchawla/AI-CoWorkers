@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import { z } from "zod";
+import { getSprintPlanningConnectorModeLabel } from "./connectors/connectorEnvironment.js";
 import { sprintPlanningRouter } from "./sprint-planning/routes.js";
 
 dotenv.config();
@@ -24,7 +25,8 @@ app.use(express.json());
 app.get("/api/health", (_request, response) => {
   response.json({
     status: "ok",
-    coworker: "jira-scrum-master"
+    coworker: "jira-scrum-master",
+    sprintPlanningConnectorMode: getSprintPlanningConnectorModeLabel()
   });
 });
 
@@ -33,6 +35,7 @@ app.get("/api/coworkers/scrum-master", (_request, response) => {
     id: "jira-scrum-master",
     name: "Jira Scrum Master",
     focus: "Sprint grooming, planning, adjustments, standups, retros, and sprint goal tracking.",
+    sprintPlanningConnectorMode: getSprintPlanningConnectorModeLabel(),
     ceremonies: ceremonySchema.options
   });
 });

@@ -25,6 +25,7 @@ import {
   getSlackLeaveConfirmations,
   getSprintPlanningTeamConfig,
   listSprintPlanningSessions,
+  runSprintPlanningConnectorAction,
   saveSprintPlanningSession
 } from "./sprintPlanningApi";
 import { calculatePlanning, toNumber, toSprintPlanningInput } from "./sprintPlanningCalculations";
@@ -34,7 +35,9 @@ import type {
   LeaveConfirmationRow,
   PlanningStatus,
   PlanningForm,
+  SavedSprintPlanningSession,
   SavedSprintPlanningSessionSummary,
+  SprintPlanningConnectorActionKey,
   SprintPlanningInput,
   VelocityHistoryRow
 } from "./sprintPlanningTypes";
@@ -180,7 +183,8 @@ const statusLabels: Record<AutomationStep["status"], string> = {
   ready: "Ready",
   "connector-pending": "Connector pending",
   "team-input": "Team input",
-  "replaced-by-app": "Excel replaced"
+  "replaced-by-app": "Excel replaced",
+  done: "Done"
 };
 
 function addDays(dateValue: string, days: number) {
@@ -275,6 +279,7 @@ export function SprintPlanningWorkflow() {
   const [isDirty, setIsDirty] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SavedSprintPlanningSessionSummary[]>([]);
   const [isSessionBrowserOpen, setIsSessionBrowserOpen] = useState(false);
+  const [isConnectorRunning, setIsConnectorRunning] = useState(false);
   const planning = useMemo(() => calculatePlanning(form), [form]);
   const apiOutput = apiPlan?.output;
   const workflowChecklist = apiOutput?.checklist ?? workflowSteps;
@@ -500,6 +505,20 @@ export function SprintPlanningWorkflow() {
     }
   }
 
+  function hydrateSavedSession(session: SavedSprintPlanningSession, statusMessage: string) {
+    setForm(toPlanningForm(session.input));
+    setVelocityHistory(session.velocityHistory);
+    setLeaveConfirmations(session.leaveConfirmations);
+    setPlanningStatus(session.planningStatus);
+    setSessionId(session.sessionId);
+    setLastSavedAt(session.updatedAt);
+    setApiPlan({
+      output: session.output
+    });
+    setIsDirty(false);
+    setDraftStatus(statusMessage);
+  }
+
   async function openSessionBrowser() {
     setDraftStatus("Loading saved sprint planning sessions...");
 
@@ -521,26 +540,58 @@ export function SprintPlanningWorkflow() {
       const payload = await getSprintPlanningSession(nextSessionId);
       const session = payload.data;
 
-      setForm(toPlanningForm(session.input));
-      setVelocityHistory(session.velocityHistory);
-      setLeaveConfirmations(session.leaveConfirmations);
-      setPlanningStatus(session.planningStatus);
-      setSessionId(session.sessionId);
-      setLastSavedAt(session.updatedAt);
-      setApiPlan({
-        output: session.output
-      });
-      setIsDirty(false);
       setIsSessionBrowserOpen(false);
-      setDraftStatus(`Opened saved session for ${session.input.currentSprintName}`);
+      hydrateSavedSession(session, `Opened saved session for ${session.input.currentSprintName}`);
     } catch {
       setDraftStatus("Saved session could not be opened");
     }
   }
 
+  async function runSavedConnectorAction(actionKey: SprintPlanningConnectorActionKey) {
+    if (sessionId == null) {
+      setDraftStatus("Save this planning session before running connectors");
+      return;
+    }
+
+    if (isDirty) {
+      setDraftStatus("Save changes before running connectors against this session");
+      return;
+    }
+
+    const runningMessages: Record<SprintPlanningConnectorActionKey, string> = {
+      "collect-leaves": "Collecting saved-session Slack leave confirmations...",
+      "close-previous-sprint": "Closing previous sprint in saved-session Jira preview...",
+      "fetch-closed-story-points": "Importing saved-session Jira story points..."
+    };
+    const successMessages: Record<SprintPlanningConnectorActionKey, string> = {
+      "collect-leaves": "Slack leave confirmations updated in saved session",
+      "close-previous-sprint": "Previous sprint closure recorded in saved session",
+      "fetch-closed-story-points": "Jira closed story points updated in saved session"
+    };
+
+    setDraftStatus(runningMessages[actionKey]);
+    setIsConnectorRunning(true);
+
+    try {
+      const payload = await runSprintPlanningConnectorAction(sessionId, actionKey);
+      hydrateSavedSession(payload.data.session, successMessages[actionKey]);
+    } catch {
+      setDraftStatus("Connector action failed; saved session was not updated");
+    } finally {
+      setIsConnectorRunning(false);
+    }
+  }
+
+  async function runSavedConnectorWorkflow() {
+    await runSavedConnectorAction("close-previous-sprint");
+    await runSavedConnectorAction("fetch-closed-story-points");
+    await runSavedConnectorAction("collect-leaves");
+  }
+
   const summaryVelocity = apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
   const sessionLabel = sessionId == null ? "New planning session" : `${form.currentSprintName} saved draft`;
   const lastSavedLabel = lastSavedAt === "" ? "Not saved yet" : `Last saved ${new Date(lastSavedAt).toLocaleString()}`;
+  const connectorActionsDisabled = sessionId == null || isDirty || isConnectorRunning;
 
   return (
     <main className="app-shell">
@@ -608,14 +659,56 @@ export function SprintPlanningWorkflow() {
           </select>
         </label>
         <div className="session-actions">
-          <button type="button" onClick={saveSession}>
+          <button type="button" onClick={saveSession} disabled={isConnectorRunning}>
             <SaveIcon size={16} />
             Save
           </button>
-          <button type="button" onClick={openSessionBrowser}>
+          <button type="button" onClick={openSessionBrowser} disabled={isConnectorRunning}>
             <FolderOpen size={16} />
             Open
           </button>
+        </div>
+        <div className="session-connector-actions">
+          <div>
+            <span className="panel-kicker">Connector actions</span>
+            <small>
+              {sessionId == null
+                ? "Save this planning session before running connectors."
+                : isDirty
+                  ? "Save changes to run connectors against the latest saved session."
+                  : "Run mock connector actions now; Jira and Slack API/MCP adapters can replace these later."}
+            </small>
+          </div>
+          <div className="connector-action-buttons">
+            <button
+              type="button"
+              disabled={connectorActionsDisabled}
+              onClick={() => runSavedConnectorAction("close-previous-sprint")}
+            >
+              <ClipboardCheck size={16} />
+              Close Jira sprint
+            </button>
+            <button
+              type="button"
+              disabled={connectorActionsDisabled}
+              onClick={() => runSavedConnectorAction("fetch-closed-story-points")}
+            >
+              <Table2 size={16} />
+              Jira story points
+            </button>
+            <button
+              type="button"
+              disabled={connectorActionsDisabled}
+              onClick={() => runSavedConnectorAction("collect-leaves")}
+            >
+              <MessageSquare size={16} />
+              Slack leaves
+            </button>
+            <button type="button" disabled={connectorActionsDisabled} onClick={runSavedConnectorWorkflow}>
+              <Sparkles size={16} />
+              Run planning connectors
+            </button>
+          </div>
         </div>
       </section>
 
