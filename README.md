@@ -46,6 +46,9 @@ The web app now starts with a Sprint Planning workbench for these inputs and out
 Current preview APIs:
 
 - `GET /api/coworkers/scrum-master/sprint-planning/team-config/:teamKey`
+- `GET /api/coworkers/scrum-master/sprint-planning/sessions?teamKey=pta`
+- `GET /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId`
+- `POST /api/coworkers/scrum-master/sprint-planning/sessions`
 - `POST /api/coworkers/scrum-master/sprint-planning/jira-reporting/import-preview`
 - `POST /api/coworkers/scrum-master/sprint-planning/slack/leave-confirmations/import-preview`
 - `POST /api/coworkers/scrum-master/sprint-planning/workflow-draft`
@@ -83,4 +86,4 @@ The web app runs on `http://localhost:5173` and the API runs on `http://localhos
 
 ## Current Status
 
-The repo contains the first sprint-planning workflow slice: a React workbench, a TypeScript API route, sprint velocity calculation, connector-ready action plan, Jira/Slack configuration placeholders, and a Postgres schema design for durable planning sessions.
+The repo contains the first sprint-planning workflow slice: a React workbench, a TypeScript API route, sprint velocity calculation, saved planning sessions, connector-ready action plan, Jira/Slack configuration placeholders, and a Postgres schema design for durable planning sessions.

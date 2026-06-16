@@ -1,6 +1,16 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { jiraReportingImportSchema, slackLeaveConfirmationImportSchema, sprintPlanningSchema } from "./schema.js";
+import {
+  jiraReportingImportSchema,
+  slackLeaveConfirmationImportSchema,
+  sprintPlanningSchema,
+  sprintPlanningSessionSaveSchema
+} from "./schema.js";
+import {
+  getSprintPlanningSession,
+  listSprintPlanningSessions,
+  saveSprintPlanningSession
+} from "./sessionRepository.js";
 import {
   calculateSprintPlanning,
   createJiraReportingImportPreview,
@@ -15,6 +25,62 @@ sprintPlanningRouter.get("/team-config/:teamKey", (request, response) => {
     status: "success",
     data: getTeamSprintPlanningConfig(request.params.teamKey)
   });
+});
+
+sprintPlanningRouter.get("/sessions", async (request, response, next) => {
+  try {
+    response.json({
+      status: "success",
+      data: await listSprintPlanningSessions(
+        typeof request.query.teamKey === "string" ? request.query.teamKey : undefined
+      )
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+sprintPlanningRouter.get("/sessions/:sessionId", async (request, response, next) => {
+  try {
+    const session = await getSprintPlanningSession(request.params.sessionId);
+
+    if (!session) {
+      response.status(404).json({
+        status: "error",
+        message: "Sprint planning session not found"
+      });
+      return;
+    }
+
+    response.json({
+      status: "success",
+      data: session
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+sprintPlanningRouter.post("/sessions", async (request, response, next) => {
+  const parsedInput = sprintPlanningSessionSaveSchema.safeParse(request.body);
+
+  if (!parsedInput.success) {
+    response.status(400).json({
+      status: "error",
+      message: "Invalid sprint planning session input",
+      errors: parsedInput.error.flatten()
+    });
+    return;
+  }
+
+  try {
+    response.json({
+      status: "success",
+      data: await saveSprintPlanningSession(parsedInput.data)
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 sprintPlanningRouter.post("/jira-reporting/import-preview", (request, response) => {

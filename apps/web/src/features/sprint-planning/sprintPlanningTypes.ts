@@ -128,7 +128,7 @@ export type VelocityHistoryRow = {
   completedStoryPoints: number;
   leaveDays: number;
   netVelocity: number;
-  source: "manual" | "mock-jira-report";
+  source: "manual" | "mock-jira-report" | "jira_report";
   includeInAverage: boolean;
 };
 
@@ -160,7 +160,7 @@ export type LeaveConfirmationRow = {
   previousSprintLeaveDays: number;
   upcomingSprintLeaveDays: number;
   confirmationStatus: "pending" | "confirmed" | "updated_by_sm";
-  source: "manual" | "mock-slack-thread";
+  source: "manual" | "mock-slack-thread" | "slack_thread";
 };
 
 export type SlackLeaveConfirmationImportResponse = {
@@ -186,4 +186,44 @@ export type PlanningResult = {
   confidenceAdjustedVelocity: number;
   sprintVelocity: number;
   velocitySource: string;
+};
+
+export type PlanningStatus = "draft" | "ready_for_review" | "finalized" | "published";
+
+export type SavedSprintPlanningSessionSummary = {
+  sessionId: string;
+  teamKey?: string;
+  teamName: string;
+  currentSprintName: string;
+  previousSprintName: string;
+  currentSprintDates: {
+    start: string;
+    end: string;
+  };
+  planningStatus: PlanningStatus;
+  sprintVelocity: number;
+  pendingLeaveConfirmations: number;
+  connectorPendingSteps: number;
+  updatedAt: string;
+};
+
+export type SavedSprintPlanningSession = {
+  sessionId: string;
+  planningStatus: PlanningStatus;
+  input: SprintPlanningInput;
+  velocityHistory: VelocityHistoryRow[];
+  leaveConfirmations: LeaveConfirmationRow[];
+  output: NonNullable<DraftResponse["data"]>["output"];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SavedSprintPlanningSessionsResponse = {
+  status: string;
+  data: SavedSprintPlanningSessionSummary[];
+};
+
+export type SavedSprintPlanningSessionResponse = {
+  status: string;
+  data: SavedSprintPlanningSession;
 };

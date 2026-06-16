@@ -1,9 +1,14 @@
 import type {
   DraftResponse,
   JiraReportingImportResponse,
+  LeaveConfirmationRow,
+  PlanningStatus,
+  SavedSprintPlanningSessionResponse,
+  SavedSprintPlanningSessionsResponse,
   SlackLeaveConfirmationImportResponse,
   SprintPlanningInput,
-  TeamConfigResponse
+  TeamConfigResponse,
+  VelocityHistoryRow
 } from "./sprintPlanningTypes";
 
 export async function getSprintPlanningTeamConfig(teamKey: string) {
@@ -79,6 +84,59 @@ export async function getSlackLeaveConfirmations(input: {
 
   if (!response.ok) {
     throw new Error(payload.status || "Slack leave confirmation import failed");
+  }
+
+  return payload;
+}
+
+export async function listSprintPlanningSessions(teamKey: string) {
+  const response = await fetch(
+    `/api/coworkers/scrum-master/sprint-planning/sessions?teamKey=${encodeURIComponent(teamKey)}`
+  );
+  const payload = (await response.json()) as SavedSprintPlanningSessionsResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.status || "Saved sprint planning sessions load failed");
+  }
+
+  return payload;
+}
+
+export async function getSprintPlanningSession(sessionId: string) {
+  const response = await fetch(`/api/coworkers/scrum-master/sprint-planning/sessions/${sessionId}`);
+  const payload = (await response.json()) as SavedSprintPlanningSessionResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.status || "Saved sprint planning session load failed");
+  }
+
+  return payload;
+}
+
+export async function saveSprintPlanningSession(input: {
+  sessionId?: string;
+  planningStatus: PlanningStatus;
+  planningInput: SprintPlanningInput;
+  velocityHistory: VelocityHistoryRow[];
+  leaveConfirmations: LeaveConfirmationRow[];
+}) {
+  const response = await fetch("/api/coworkers/scrum-master/sprint-planning/sessions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      sessionId: input.sessionId,
+      planningStatus: input.planningStatus,
+      input: input.planningInput,
+      velocityHistory: input.velocityHistory,
+      leaveConfirmations: input.leaveConfirmations
+    })
+  });
+  const payload = (await response.json()) as SavedSprintPlanningSessionResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.status || "Saved sprint planning session save failed");
   }
 
   return payload;

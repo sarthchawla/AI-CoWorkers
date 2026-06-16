@@ -121,6 +121,8 @@ button {
 }
 
 .hero,
+.session-strip,
+.session-browser,
 .planning-grid {
   width: min(1180px, calc(100% - 40px));
   margin: 0 auto;
@@ -214,6 +216,152 @@ h1 {
   background: #111827;
   color: #ffffff;
   font-weight: 800;
+}
+
+.session-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid #d9ded1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 30px rgba(23, 32, 51, 0.06);
+}
+
+.session-strip strong,
+.session-strip small,
+.status-select span {
+  display: block;
+}
+
+.session-strip strong {
+  margin-top: 4px;
+  color: #172033;
+}
+
+.session-strip small,
+.status-select span,
+.session-list small {
+  color: #596273;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.status-select {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.status-select select {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #cdd5cf;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  font-weight: 750;
+}
+
+.session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.session-actions button,
+.session-browser-header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #cdd5cf;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #263248;
+  font-weight: 800;
+}
+
+.session-actions button:first-child {
+  border-color: #111827;
+  background: #111827;
+  color: #ffffff;
+}
+
+.session-browser {
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid #d9ded1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(23, 32, 51, 0.06);
+}
+
+.session-browser-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.session-browser h2 {
+  margin: 3px 0 0;
+  color: #172033;
+  font-size: 1.12rem;
+  letter-spacing: 0;
+}
+
+.session-list {
+  display: grid;
+  gap: 10px;
+}
+
+.session-list > p {
+  margin: 0;
+  color: #596273;
+}
+
+.session-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 1px solid #edf0ea;
+  border-radius: 8px;
+  background: #fbfcf8;
+  color: #172033;
+  text-align: left;
+}
+
+.session-list button:hover,
+.session-list button:focus-visible,
+.session-actions button:focus-visible,
+.session-browser-header button:focus-visible,
+.status-select select:focus-visible {
+  border-color: #2a6870;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(42, 104, 112, 0.13);
+}
+
+.session-meta {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  min-width: 170px;
+}
+
+.session-meta strong {
+  color: #0f3f45;
 }
 
 .inline-action {
@@ -553,6 +701,15 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .session-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .session-actions {
+    justify-content: flex-start;
+  }
+
   .velocity-panel {
     width: 100%;
   }
@@ -565,6 +722,8 @@ h1 {
 
   .topbar,
   .hero,
+  .session-strip,
+  .session-browser,
   .planning-grid {
     width: calc(100% - 28px);
   }
@@ -581,6 +740,17 @@ h1 {
 
   .field-grid {
     grid-template-columns: 1fr;
+  }
+
+  .session-browser-header,
+  .session-list button {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .session-meta {
+    justify-items: start;
+    min-width: 0;
   }
 
   .velocity-panel strong {

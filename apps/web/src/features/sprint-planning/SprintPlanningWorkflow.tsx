@@ -9,25 +9,33 @@ import {
   ClipboardCheck,
   Copy,
   FileText,
+  FolderOpen,
   Goal,
   ListChecks,
   MessageSquare,
+  Save as SaveIcon,
   Settings2,
   Sparkles,
   Table2
 } from "lucide-react";
 import {
   createSprintPlanningWorkflowDraft,
+  getSprintPlanningSession,
   getJiraVelocityHistory,
   getSlackLeaveConfirmations,
-  getSprintPlanningTeamConfig
+  getSprintPlanningTeamConfig,
+  listSprintPlanningSessions,
+  saveSprintPlanningSession
 } from "./sprintPlanningApi";
 import { calculatePlanning, toNumber, toSprintPlanningInput } from "./sprintPlanningCalculations";
 import type {
   AutomationStep,
   DraftResponse,
   LeaveConfirmationRow,
+  PlanningStatus,
   PlanningForm,
+  SavedSprintPlanningSessionSummary,
+  SprintPlanningInput,
   VelocityHistoryRow
 } from "./sprintPlanningTypes";
 
@@ -228,22 +236,60 @@ function fallbackSlackPreview(form: PlanningForm) {
   ].join("\n");
 }
 
+function toPlanningForm(input: SprintPlanningInput): PlanningForm {
+  return {
+    teamKey: input.teamKey ?? "",
+    teamName: input.teamName,
+    jiraProjectKey: input.jiraProjectKey,
+    jiraBoardName: input.jiraBoardName,
+    slackChannel: input.slackChannel,
+    previousSprintName: input.previousSprintName,
+    currentSprintName: input.currentSprintName,
+    previousSprintStart: input.previousSprintDates.start,
+    previousSprintEnd: input.previousSprintDates.end,
+    currentSprintStart: input.currentSprintDates.start,
+    currentSprintEnd: input.currentSprintDates.end,
+    daysInSprintExcludingHolidays: input.daysInSprintExcludingHolidays,
+    holidayCount: input.holidayCount,
+    teamMemberCount: input.teamMemberCount,
+    previousVelocityMinus3: input.previousVelocityMinus3,
+    previousVelocityMinus2: input.previousVelocityMinus2,
+    lastNetVelocity: input.lastNetVelocity,
+    previousSprintLeaveDays: input.previousSprintLeaveDays,
+    upcomingSprintLeaveDays: input.upcomingSprintLeaveDays,
+    confidenceAdjustment: input.confidenceAdjustment,
+    manualVelocityOverride: input.manualVelocityOverride == null ? "" : String(input.manualVelocityOverride),
+    velocityOverrideReason: input.velocityOverrideReason
+  };
+}
+
 export function SprintPlanningWorkflow() {
   const [form, setForm] = useState(initialForm);
   const [velocityHistory, setVelocityHistory] = useState(initialVelocityHistory);
   const [leaveConfirmations, setLeaveConfirmations] = useState(initialLeaveConfirmations);
   const [draftStatus, setDraftStatus] = useState("Not synced with API yet");
   const [apiPlan, setApiPlan] = useState<DraftResponse["data"] | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [planningStatus, setPlanningStatus] = useState<PlanningStatus>("draft");
+  const [lastSavedAt, setLastSavedAt] = useState("");
+  const [isDirty, setIsDirty] = useState(false);
+  const [savedSessions, setSavedSessions] = useState<SavedSprintPlanningSessionSummary[]>([]);
+  const [isSessionBrowserOpen, setIsSessionBrowserOpen] = useState(false);
   const planning = useMemo(() => calculatePlanning(form), [form]);
   const apiOutput = apiPlan?.output;
   const workflowChecklist = apiOutput?.checklist ?? workflowSteps;
   const slackPreview = apiOutput?.slackLeaveRequestPreview ?? fallbackSlackPreview(form);
+
+  function markDirty() {
+    setIsDirty(true);
+  }
 
   function updateText(field: keyof PlanningForm, value: string) {
     setForm((current) => ({
       ...current,
       [field]: value
     }));
+    markDirty();
   }
 
   function updateNumber(field: keyof PlanningForm, value: string) {
@@ -251,6 +297,7 @@ export function SprintPlanningWorkflow() {
       ...current,
       [field]: toNumber(value)
     }));
+    markDirty();
   }
 
   function patchVelocityFields(rows: VelocityHistoryRow[]) {
@@ -285,6 +332,7 @@ export function SprintPlanningWorkflow() {
 
     setVelocityHistory(nextRows);
     patchVelocityFields(nextRows);
+    markDirty();
   }
 
   function patchLeaveTotals(rows: LeaveConfirmationRow[]) {
@@ -315,6 +363,7 @@ export function SprintPlanningWorkflow() {
 
     setLeaveConfirmations(nextRows);
     patchLeaveTotals(nextRows);
+    markDirty();
   }
 
   async function generateDraft() {
@@ -347,6 +396,7 @@ export function SprintPlanningWorkflow() {
         daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays
       }));
       setDraftStatus("Team config loaded from backend defaults");
+      markDirty();
     } catch {
       setDraftStatus("Team config unavailable; keep editing local values");
     }
@@ -372,6 +422,7 @@ export function SprintPlanningWorkflow() {
           rows.find((row) => row.sprintOffset === -1)?.leaveDays ?? current.previousSprintLeaveDays
       }));
       setDraftStatus("Imported last three sprint velocities from Jira reporting");
+      markDirty();
     } catch {
       setDraftStatus("Jira reporting import unavailable; keep editing velocity rows");
     }
@@ -394,6 +445,7 @@ export function SprintPlanningWorkflow() {
         ...payload.data.formPatch
       }));
       setDraftStatus("Imported leave confirmations from mock Slack thread");
+      markDirty();
     } catch {
       setDraftStatus("Slack leave confirmation import unavailable; keep editing leave rows");
     }
@@ -409,6 +461,7 @@ export function SprintPlanningWorkflow() {
       previousVelocityMinus2: current.lastNetVelocity
     }));
     setDraftStatus("Prepared current sprint from previous sprint context");
+    markDirty();
   }
 
   function calculateWorkingDays() {
@@ -420,9 +473,74 @@ export function SprintPlanningWorkflow() {
       )
     }));
     setDraftStatus("Calculated working days from current sprint dates and holidays");
+    markDirty();
+  }
+
+  async function saveSession() {
+    setDraftStatus("Saving sprint planning session...");
+
+    try {
+      const payload = await saveSprintPlanningSession({
+        sessionId: sessionId ?? undefined,
+        planningStatus,
+        planningInput: toSprintPlanningInput(form),
+        velocityHistory,
+        leaveConfirmations
+      });
+
+      setSessionId(payload.data.sessionId);
+      setLastSavedAt(payload.data.updatedAt);
+      setApiPlan({
+        output: payload.data.output
+      });
+      setIsDirty(false);
+      setDraftStatus("Sprint planning session saved");
+    } catch {
+      setDraftStatus("Save failed; keep the session open and try again");
+    }
+  }
+
+  async function openSessionBrowser() {
+    setDraftStatus("Loading saved sprint planning sessions...");
+
+    try {
+      const payload = await listSprintPlanningSessions(form.teamKey);
+
+      setSavedSessions(payload.data);
+      setIsSessionBrowserOpen(true);
+      setDraftStatus(payload.data.length > 0 ? "Saved sessions loaded" : "No saved sessions for this team yet");
+    } catch {
+      setDraftStatus("Saved sessions unavailable");
+    }
+  }
+
+  async function loadSession(nextSessionId: string) {
+    setDraftStatus("Opening saved sprint planning session...");
+
+    try {
+      const payload = await getSprintPlanningSession(nextSessionId);
+      const session = payload.data;
+
+      setForm(toPlanningForm(session.input));
+      setVelocityHistory(session.velocityHistory);
+      setLeaveConfirmations(session.leaveConfirmations);
+      setPlanningStatus(session.planningStatus);
+      setSessionId(session.sessionId);
+      setLastSavedAt(session.updatedAt);
+      setApiPlan({
+        output: session.output
+      });
+      setIsDirty(false);
+      setIsSessionBrowserOpen(false);
+      setDraftStatus(`Opened saved session for ${session.input.currentSprintName}`);
+    } catch {
+      setDraftStatus("Saved session could not be opened");
+    }
   }
 
   const summaryVelocity = apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
+  const sessionLabel = sessionId == null ? "New planning session" : `${form.currentSprintName} saved draft`;
+  const lastSavedLabel = lastSavedAt === "" ? "Not saved yet" : `Last saved ${new Date(lastSavedAt).toLocaleString()}`;
 
   return (
     <main className="app-shell">
@@ -462,9 +580,83 @@ export function SprintPlanningWorkflow() {
             <Sparkles size={18} />
             Generate SM workflow
           </button>
-          <small>{draftStatus}</small>
+          <small aria-live="polite">{draftStatus}</small>
         </aside>
       </section>
+
+      <section className="session-strip" aria-label="Saved sprint planning session">
+        <div>
+          <span className="panel-kicker">Session</span>
+          <strong>{sessionLabel}</strong>
+          <small>
+            {planningStatus.replaceAll("_", " ")} · {isDirty ? "Unsaved changes" : lastSavedLabel}
+          </small>
+        </div>
+        <label className="status-select">
+          <span>Planning status</span>
+          <select
+            value={planningStatus}
+            onChange={(event) => {
+              setPlanningStatus(event.target.value as PlanningStatus);
+              markDirty();
+            }}
+          >
+            <option value="draft">Draft</option>
+            <option value="ready_for_review">Ready for review</option>
+            <option value="finalized">Finalized</option>
+            <option value="published">Published</option>
+          </select>
+        </label>
+        <div className="session-actions">
+          <button type="button" onClick={saveSession}>
+            <SaveIcon size={16} />
+            Save
+          </button>
+          <button type="button" onClick={openSessionBrowser}>
+            <FolderOpen size={16} />
+            Open
+          </button>
+        </div>
+      </section>
+
+      {isSessionBrowserOpen ? (
+        <section className="session-browser" aria-labelledby="session-browser-title">
+          <div className="session-browser-header">
+            <div>
+              <span className="panel-kicker">Saved sessions</span>
+              <h2 id="session-browser-title">Open sprint planning session</h2>
+            </div>
+            <button type="button" onClick={() => setIsSessionBrowserOpen(false)}>
+              Close
+            </button>
+          </div>
+          <div className="session-list">
+            {savedSessions.length === 0 ? (
+              <p>No saved sprint planning sessions for {form.teamKey} yet.</p>
+            ) : (
+              savedSessions.map((session) => (
+                <button type="button" key={session.sessionId} onClick={() => loadSession(session.sessionId)}>
+                  <span>
+                    <strong>{session.currentSprintName}</strong>
+                    <small>
+                      {session.currentSprintDates.start} to {session.currentSprintDates.end} · from{" "}
+                      {session.previousSprintName}
+                    </small>
+                  </span>
+                  <span className="session-meta">
+                    <small>{session.planningStatus.replaceAll("_", " ")}</small>
+                    <strong>{session.sprintVelocity} SP</strong>
+                    <small>
+                      {session.pendingLeaveConfirmations} pending leaves · {session.connectorPendingSteps} connector
+                      steps
+                    </small>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
 
       <section className="planning-grid">
         <form className="planning-form">

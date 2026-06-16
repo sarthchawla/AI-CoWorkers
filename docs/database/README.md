@@ -13,4 +13,4 @@ It covers:
 
 The current app uses `mock-jira-report` as the source for preview imports. Real Jira API or MCP imports should write `jira_report`.
 
-The app does not connect to a database yet. This is the target schema for the next backend milestone.
+The API currently saves development drafts to a local JSON file configured by `SPRINT_PLANNING_DATA_FILE`. This schema is the target Postgres shape for replacing that adapter with durable multi-user storage.

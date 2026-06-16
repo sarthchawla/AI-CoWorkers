@@ -18,6 +18,8 @@ CREATE TABLE sprint_planning_sessions (
   team_config_id BIGINT NOT NULL REFERENCES sprint_planning_team_configs(team_config_id) ON DELETE RESTRICT,
   previous_sprint_name TEXT NOT NULL,
   current_sprint_name TEXT NOT NULL,
+  previous_jira_sprint_id TEXT,
+  current_jira_sprint_id TEXT,
   previous_sprint_start_date DATE NOT NULL,
   previous_sprint_end_date DATE NOT NULL,
   current_sprint_start_date DATE NOT NULL,
@@ -37,7 +39,8 @@ CREATE TABLE sprint_planning_sessions (
     planning_status IN ('draft', 'ready_for_review', 'finalized', 'published')
   ),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (team_config_id, current_sprint_name)
 );
 
 CREATE TABLE sprint_planning_velocity_history (
@@ -77,7 +80,9 @@ CREATE TABLE sprint_planning_leave_confirmations (
   confirmation_status TEXT NOT NULL DEFAULT 'pending' CHECK (
     confirmation_status IN ('pending', 'confirmed', 'updated_by_sm')
   ),
+  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'mock-slack-thread', 'slack_thread')),
   slack_user_id TEXT,
+  slack_thread_id TEXT,
   confirmed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
