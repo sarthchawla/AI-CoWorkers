@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const sprintPlanningSchema = z.object({
+  teamKey: z.string().optional(),
   teamName: z.string().min(1),
   jiraProjectKey: z.string().min(1),
   jiraBoardName: z.string().min(1),
@@ -21,9 +22,11 @@ export const sprintPlanningSchema = z.object({
   previousVelocityMinus3: z.number().min(0),
   previousVelocityMinus2: z.number().min(0),
   lastNetVelocity: z.number().min(0),
-  plannedLeaveDays: z.number().min(0),
+  previousSprintLeaveDays: z.number().min(0),
+  upcomingSprintLeaveDays: z.number().min(0),
   manualVelocityOverride: z.number().min(0).nullable().optional(),
-  confidenceAdjustment: z.number().min(-50).max(50)
+  confidenceAdjustment: z.number().min(-50).max(50),
+  velocityOverrideReason: z.string().optional()
 });
 
 export type SprintPlanningInput = z.infer<typeof sprintPlanningSchema>;

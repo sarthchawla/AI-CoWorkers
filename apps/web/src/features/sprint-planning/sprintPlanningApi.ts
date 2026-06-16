@@ -1,7 +1,18 @@
-import type { DraftResponse, SprintPlanningInput } from "./sprintPlanningTypes";
+import type { DraftResponse, SprintPlanningInput, TeamConfigResponse } from "./sprintPlanningTypes";
 
-export async function createSprintPlanningDraft(input: SprintPlanningInput) {
-  const response = await fetch("/api/coworkers/scrum-master/sprint-planning/draft", {
+export async function getSprintPlanningTeamConfig(teamKey: string) {
+  const response = await fetch(`/api/coworkers/scrum-master/sprint-planning/team-config/${teamKey}`);
+  const payload = (await response.json()) as TeamConfigResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.status || "Team config load failed");
+  }
+
+  return payload;
+}
+
+export async function createSprintPlanningWorkflowDraft(input: SprintPlanningInput) {
+  const response = await fetch("/api/coworkers/scrum-master/sprint-planning/workflow-draft", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -17,3 +28,4 @@ export async function createSprintPlanningDraft(input: SprintPlanningInput) {
   return payload;
 }
 
+export const createSprintPlanningDraft = createSprintPlanningWorkflowDraft;

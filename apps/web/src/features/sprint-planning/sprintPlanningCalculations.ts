@@ -13,7 +13,7 @@ export function calculatePlanning(form: PlanningForm) {
     (form.previousVelocityMinus3 + form.previousVelocityMinus2 + form.lastNetVelocity) / 3
   );
   const baselineCapacityDays = form.daysInSprintExcludingHolidays * form.teamMemberCount;
-  const availableCapacityDays = Math.max(baselineCapacityDays - form.plannedLeaveDays, 0);
+  const availableCapacityDays = Math.max(baselineCapacityDays - form.upcomingSprintLeaveDays, 0);
   const capacityRatio = baselineCapacityDays > 0 ? availableCapacityDays / baselineCapacityDays : 0;
   const capacityAdjustedVelocity = roundVelocity(averageNetVelocity * capacityRatio);
   const confidenceAdjustedVelocity = roundVelocity(
@@ -34,6 +34,7 @@ export function calculatePlanning(form: PlanningForm) {
 
 export function toSprintPlanningInput(form: PlanningForm): SprintPlanningInput {
   return {
+    teamKey: form.teamKey,
     teamName: form.teamName,
     jiraProjectKey: form.jiraProjectKey,
     jiraBoardName: form.jiraBoardName,
@@ -54,9 +55,11 @@ export function toSprintPlanningInput(form: PlanningForm): SprintPlanningInput {
     previousVelocityMinus3: form.previousVelocityMinus3,
     previousVelocityMinus2: form.previousVelocityMinus2,
     lastNetVelocity: form.lastNetVelocity,
-    plannedLeaveDays: form.plannedLeaveDays,
+    previousSprintLeaveDays: form.previousSprintLeaveDays,
+    upcomingSprintLeaveDays: form.upcomingSprintLeaveDays,
     confidenceAdjustment: form.confidenceAdjustment,
     manualVelocityOverride:
-      form.manualVelocityOverride.trim() === "" ? null : toNumber(form.manualVelocityOverride)
+      form.manualVelocityOverride.trim() === "" ? null : toNumber(form.manualVelocityOverride),
+    velocityOverrideReason: form.velocityOverrideReason
   };
 }

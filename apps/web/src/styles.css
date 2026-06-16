@@ -17,7 +17,8 @@ body {
 }
 
 button,
-input {
+input,
+pre {
   font: inherit;
 }
 
@@ -215,6 +216,28 @@ h1 {
   font-weight: 800;
 }
 
+.inline-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  margin: -4px 0 16px;
+  padding: 0 12px;
+  border: 1px solid #cdd5cf;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #263248;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .velocity-panel small {
   display: block;
   line-height: 1.4;
@@ -360,6 +383,36 @@ h1 {
 
 .connector-card p {
   line-height: 1.6;
+}
+
+.preview-box,
+.preview-list {
+  margin: 0;
+  border: 1px solid #dbe1db;
+  border-radius: 8px;
+  background: #fbfcf8;
+  color: #263248;
+}
+
+.preview-box {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  padding: 14px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.preview-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.preview-list p {
+  margin: 0;
+  color: #263248;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .connector-links {

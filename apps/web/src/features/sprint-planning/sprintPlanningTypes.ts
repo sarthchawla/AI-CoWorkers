@@ -1,4 +1,5 @@
 export type PlanningForm = {
+  teamKey: string;
   teamName: string;
   jiraProjectKey: string;
   jiraBoardName: string;
@@ -15,12 +16,15 @@ export type PlanningForm = {
   previousVelocityMinus3: number;
   previousVelocityMinus2: number;
   lastNetVelocity: number;
-  plannedLeaveDays: number;
+  previousSprintLeaveDays: number;
+  upcomingSprintLeaveDays: number;
   confidenceAdjustment: number;
   manualVelocityOverride: string;
+  velocityOverrideReason: string;
 };
 
 export type SprintPlanningInput = {
+  teamKey?: string;
   teamName: string;
   jiraProjectKey: string;
   jiraBoardName: string;
@@ -41,9 +45,11 @@ export type SprintPlanningInput = {
   previousVelocityMinus3: number;
   previousVelocityMinus2: number;
   lastNetVelocity: number;
-  plannedLeaveDays: number;
+  previousSprintLeaveDays: number;
+  upcomingSprintLeaveDays: number;
   confidenceAdjustment: number;
   manualVelocityOverride: number | null;
+  velocityOverrideReason: string;
 };
 
 export type AutomationStep = {
@@ -64,6 +70,23 @@ export type DraftResponse = {
       confidenceAdjustedVelocity: number;
       availableCapacityDays: number;
       velocitySource: string;
+      velocityOverrideReason: string | null;
+      sprintCloneSummary: {
+        from: string;
+        to: string;
+        copiedFields: string[];
+      };
+      slackLeaveRequestPreview: string;
+      jiraCloseReportPreview: {
+        closeSprintAction: string;
+        reportingAction: string;
+        lastNetVelocity: number;
+      };
+      checklist: Array<{
+        id: string;
+        status: string;
+        label: string;
+      }>;
       automationPlan: Array<{
         id: string;
         status: string;
@@ -71,6 +94,29 @@ export type DraftResponse = {
       }>;
     };
   };
+};
+
+export type TeamSprintPlanningConfig = {
+  teamKey: string;
+  teamName: string;
+  jira: {
+    projectKey: string;
+    boardName: string;
+    boardId?: string;
+  };
+  slack: {
+    channelName: string;
+    channelId?: string;
+  };
+  defaults: {
+    teamMemberCount: number;
+    daysInSprintExcludingHolidays: number;
+  };
+};
+
+export type TeamConfigResponse = {
+  status: string;
+  data: TeamSprintPlanningConfig;
 };
 
 export type PlanningResult = {

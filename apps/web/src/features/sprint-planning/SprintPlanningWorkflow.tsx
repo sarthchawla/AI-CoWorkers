@@ -7,17 +7,21 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
+  Copy,
+  FileText,
   Goal,
+  ListChecks,
   MessageSquare,
   Settings2,
   Sparkles,
   Table2
 } from "lucide-react";
-import { createSprintPlanningDraft } from "./sprintPlanningApi";
+import { createSprintPlanningWorkflowDraft, getSprintPlanningTeamConfig } from "./sprintPlanningApi";
 import { calculatePlanning, toNumber, toSprintPlanningInput } from "./sprintPlanningCalculations";
 import type { AutomationStep, DraftResponse, PlanningForm } from "./sprintPlanningTypes";
 
 const initialForm: PlanningForm = {
+  teamKey: "pta",
   teamName: "PTA",
   jiraProjectKey: "PTATPA",
   jiraBoardName: "PTA Sprint Board",
@@ -34,9 +38,11 @@ const initialForm: PlanningForm = {
   previousVelocityMinus3: 82,
   previousVelocityMinus2: 88,
   lastNetVelocity: 84,
-  plannedLeaveDays: 3,
+  previousSprintLeaveDays: 2,
+  upcomingSprintLeaveDays: 3,
   confidenceAdjustment: 0,
-  manualVelocityOverride: ""
+  manualVelocityOverride: "",
+  velocityOverrideReason: ""
 };
 
 const workflowSteps: AutomationStep[] = [
@@ -79,11 +85,67 @@ const statusLabels: Record<AutomationStep["status"], string> = {
   "replaced-by-app": "Excel replaced"
 };
 
+function addDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
+
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function countWeekdays(startValue: string, endValue: string) {
+  const start = new Date(`${startValue}T00:00:00`);
+  const end = new Date(`${endValue}T00:00:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+    return 0;
+  }
+
+  let count = 0;
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    const day = cursor.getDay();
+
+    if (day !== 0 && day !== 6) {
+      count += 1;
+    }
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return count;
+}
+
+function nextSprintName(previousSprintName: string) {
+  const match = previousSprintName.match(/^Q(\d+)S(\d+)\s*-\s*(\d{4})$/i);
+
+  if (!match) {
+    return previousSprintName;
+  }
+
+  return `Q${match[1]}S${Number(match[2]) + 1} - ${match[3]}`;
+}
+
+function fallbackSlackPreview(form: PlanningForm) {
+  return [
+    `Hi team, please update leaves for ${form.previousSprintName} and ${form.currentSprintName}.`,
+    `Current plan has ${form.previousSprintLeaveDays} previous sprint leave days and ${form.upcomingSprintLeaveDays} upcoming sprint leave days recorded.`,
+    "Please reply with any corrections before sprint planning is finalized."
+  ].join("\n");
+}
+
 export function SprintPlanningWorkflow() {
   const [form, setForm] = useState(initialForm);
   const [draftStatus, setDraftStatus] = useState("Not synced with API yet");
   const [apiPlan, setApiPlan] = useState<DraftResponse["data"] | null>(null);
   const planning = useMemo(() => calculatePlanning(form), [form]);
+  const apiOutput = apiPlan?.output;
+  const workflowChecklist = apiOutput?.checklist ?? workflowSteps;
+  const slackPreview = apiOutput?.slackLeaveRequestPreview ?? fallbackSlackPreview(form);
 
   function updateText(field: keyof PlanningForm, value: string) {
     setForm((current) => ({
@@ -103,12 +165,58 @@ export function SprintPlanningWorkflow() {
     setDraftStatus("Generating workflow draft...");
 
     try {
-      const payload = await createSprintPlanningDraft(toSprintPlanningInput(form));
+      const payload = await createSprintPlanningWorkflowDraft(toSprintPlanningInput(form));
       setApiPlan(payload.data ?? null);
       setDraftStatus("Draft generated from backend workflow engine");
     } catch {
       setDraftStatus("API unavailable; showing local calculation");
     }
+  }
+
+  async function loadTeamConfig() {
+    setDraftStatus("Loading team sprint-planning config...");
+
+    try {
+      const payload = await getSprintPlanningTeamConfig(form.teamKey);
+      const config = payload.data;
+
+      setForm((current) => ({
+        ...current,
+        teamKey: config.teamKey,
+        teamName: config.teamName,
+        jiraProjectKey: config.jira.projectKey,
+        jiraBoardName: config.jira.boardName,
+        slackChannel: config.slack.channelName,
+        teamMemberCount: config.defaults.teamMemberCount,
+        daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays
+      }));
+      setDraftStatus("Team config loaded from backend defaults");
+    } catch {
+      setDraftStatus("Team config unavailable; keep editing local values");
+    }
+  }
+
+  function clonePreviousSprint() {
+    setForm((current) => ({
+      ...current,
+      currentSprintName: nextSprintName(current.previousSprintName),
+      currentSprintStart: addDays(current.previousSprintStart, 14),
+      currentSprintEnd: addDays(current.previousSprintEnd, 14),
+      previousVelocityMinus3: current.previousVelocityMinus2,
+      previousVelocityMinus2: current.lastNetVelocity
+    }));
+    setDraftStatus("Prepared current sprint from previous sprint context");
+  }
+
+  function calculateWorkingDays() {
+    setForm((current) => ({
+      ...current,
+      daysInSprintExcludingHolidays: Math.max(
+        countWeekdays(current.currentSprintStart, current.currentSprintEnd) - current.holidayCount,
+        0
+      )
+    }));
+    setDraftStatus("Calculated working days from current sprint dates and holidays");
   }
 
   const summaryVelocity = apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
@@ -126,6 +234,7 @@ export function SprintPlanningWorkflow() {
           </div>
         </div>
         <div className="topbar-actions">
+          <span>{form.teamKey}</span>
           <span>{form.jiraProjectKey}</span>
           <span>{form.slackChannel}</span>
         </div>
@@ -157,7 +266,16 @@ export function SprintPlanningWorkflow() {
       <section className="planning-grid">
         <form className="planning-form">
           <SectionTitle icon={Settings2} title="Team connectors" />
+          <button className="inline-action" type="button" onClick={loadTeamConfig}>
+            <Settings2 size={16} />
+            Load team config
+          </button>
           <div className="field-grid">
+            <TextField
+              label="Team key"
+              value={form.teamKey}
+              onChange={(value) => updateText("teamKey", value)}
+            />
             <TextField label="Team" value={form.teamName} onChange={(value) => updateText("teamName", value)} />
             <TextField
               label="Jira project key"
@@ -177,6 +295,16 @@ export function SprintPlanningWorkflow() {
           </div>
 
           <SectionTitle icon={CalendarDays} title="Sprint calendar" />
+          <div className="inline-actions">
+            <button className="inline-action" type="button" onClick={clonePreviousSprint}>
+              <Copy size={16} />
+              Clone previous sprint context
+            </button>
+            <button className="inline-action" type="button" onClick={calculateWorkingDays}>
+              <CalendarDays size={16} />
+              Calculate working days
+            </button>
+          </div>
           <div className="field-grid">
             <TextField
               label="Previous sprint"
@@ -247,9 +375,14 @@ export function SprintPlanningWorkflow() {
               onChange={(value) => updateNumber("lastNetVelocity", value)}
             />
             <NumberField
-              label="Planned leave days"
-              value={form.plannedLeaveDays}
-              onChange={(value) => updateNumber("plannedLeaveDays", value)}
+              label="Previous sprint leave days"
+              value={form.previousSprintLeaveDays}
+              onChange={(value) => updateNumber("previousSprintLeaveDays", value)}
+            />
+            <NumberField
+              label="Upcoming leave days"
+              value={form.upcomingSprintLeaveDays}
+              onChange={(value) => updateNumber("upcomingSprintLeaveDays", value)}
             />
             <NumberField
               label="Confidence adjustment %"
@@ -262,6 +395,12 @@ export function SprintPlanningWorkflow() {
               placeholder="Optional"
               value={form.manualVelocityOverride}
               onChange={(value) => updateText("manualVelocityOverride", value)}
+            />
+            <TextField
+              label="Override reason"
+              placeholder="Confidence, low-effort spillover, or team call"
+              value={form.velocityOverrideReason}
+              onChange={(value) => updateText("velocityOverrideReason", value)}
             />
           </div>
         </form>
@@ -281,9 +420,9 @@ export function SprintPlanningWorkflow() {
           </article>
 
           <article className="output-card">
-            <SectionTitle icon={ClipboardCheck} title="SM workflow" />
+            <SectionTitle icon={ListChecks} title="SM workflow" />
             <div className="step-list">
-              {workflowSteps.map((step) => (
+              {workflowChecklist.map((step) => (
                 <div className="step-row" key={step.id}>
                   <span className={`step-status ${step.status}`}>
                     <CheckCircle2 size={16} />
@@ -291,7 +430,8 @@ export function SprintPlanningWorkflow() {
                   <div>
                     <p>{step.label}</p>
                     <small>
-                      {step.owner} · {statusLabels[step.status]}
+                      {"owner" in step ? `${step.owner} · ` : ""}
+                      {statusLabels[step.status as AutomationStep["status"]] ?? step.status}
                     </small>
                   </div>
                 </div>
@@ -299,8 +439,22 @@ export function SprintPlanningWorkflow() {
             </div>
           </article>
 
+          <article className="output-card">
+            <SectionTitle icon={MessageSquare} title="Slack leave request" />
+            <pre className="preview-box">{slackPreview}</pre>
+          </article>
+
+          <article className="output-card">
+            <SectionTitle icon={FileText} title="Jira close and report" />
+            <div className="preview-list">
+              <p>{apiOutput?.jiraCloseReportPreview.closeSprintAction ?? `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}</p>
+              <p>{apiOutput?.jiraCloseReportPreview.reportingAction ?? `Fetch completed story points for ${form.previousSprintName} in ${form.jiraProjectKey}`}</p>
+              <p>Last net velocity: {apiOutput?.jiraCloseReportPreview.lastNetVelocity ?? form.lastNetVelocity}</p>
+            </div>
+          </article>
+
           <article className="output-card connector-card">
-            <SectionTitle icon={MessageSquare} title="Next connector actions" />
+            <SectionTitle icon={ClipboardCheck} title="Next connector actions" />
             <p>
               Jira and Slack are configurable inputs in this screen now. The next backend step is to replace manual
               values with connector reads for sprint closure, completed story points, and leave collection.

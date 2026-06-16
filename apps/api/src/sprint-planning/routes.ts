@@ -1,10 +1,18 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { sprintPlanningSchema } from "./schema.js";
-import { calculateSprintPlanning } from "./service.js";
+import { calculateSprintPlanning, getTeamSprintPlanningConfig } from "./service.js";
 
 export const sprintPlanningRouter = Router();
 
-sprintPlanningRouter.post("/draft", (request, response) => {
+sprintPlanningRouter.get("/team-config/:teamKey", (request, response) => {
+  response.json({
+    status: "success",
+    data: getTeamSprintPlanningConfig(request.params.teamKey)
+  });
+});
+
+function createWorkflowDraft(request: Request, response: Response) {
   const parsedInput = sprintPlanningSchema.safeParse(request.body);
 
   if (!parsedInput.success) {
@@ -23,4 +31,7 @@ sprintPlanningRouter.post("/draft", (request, response) => {
       output: calculateSprintPlanning(parsedInput.data)
     }
   });
-});
+}
+
+sprintPlanningRouter.post("/draft", createWorkflowDraft);
+sprintPlanningRouter.post("/workflow-draft", createWorkflowDraft);

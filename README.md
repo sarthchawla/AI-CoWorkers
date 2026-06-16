@@ -62,6 +62,7 @@ apps/
   web/   React TypeScript frontend
 docs/
   assets/
+  database/
 ```
 
 ## Getting Started
@@ -75,4 +76,4 @@ The web app runs on `http://localhost:5173` and the API runs on `http://localhos
 
 ## Current Status
 
-The repo contains the first sprint-planning workflow slice: a React workbench, a TypeScript API route, sprint velocity calculation, connector-ready action plan, and Jira/Slack configuration placeholders.
+The repo contains the first sprint-planning workflow slice: a React workbench, a TypeScript API route, sprint velocity calculation, connector-ready action plan, Jira/Slack configuration placeholders, and a Postgres schema design for durable planning sessions.
