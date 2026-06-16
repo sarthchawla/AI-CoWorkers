@@ -1,5 +1,25 @@
 import { z } from "zod";
 
+export const teamSprintPlanningConfigSchema = z.object({
+  teamKey: z.string().min(1),
+  teamName: z.string().min(1),
+  jira: z.object({
+    projectKey: z.string().min(1),
+    boardName: z.string().min(1),
+    boardId: z.string().optional()
+  }),
+  slack: z.object({
+    channelName: z.string().min(1),
+    channelId: z.string().optional()
+  }),
+  defaults: z.object({
+    teamMemberCount: z.number().positive(),
+    daysInSprintExcludingHolidays: z.number().positive()
+  })
+});
+
+export type TeamSprintPlanningConfigInput = z.infer<typeof teamSprintPlanningConfigSchema>;
+
 export const sprintPlanningSchema = z.object({
   teamKey: z.string().optional(),
   teamName: z.string().min(1),

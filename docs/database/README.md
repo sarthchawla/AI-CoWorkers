@@ -13,4 +13,4 @@ It covers:
 
 The current app uses `mock-jira-report` as the source for preview imports. Real Jira API or MCP imports should write `jira_report`.
 
-The API currently saves development drafts to a local JSON file configured by `SPRINT_PLANNING_DATA_FILE`. This schema is the target Postgres shape for replacing that adapter with durable multi-user storage.
+The API currently saves development drafts to a local JSON file configured by `SPRINT_PLANNING_DATA_FILE`, and team connector defaults to `SPRINT_PLANNING_TEAM_CONFIG_FILE`. This schema is the target Postgres shape for replacing those adapters with durable multi-user storage.

@@ -26,6 +26,7 @@ import {
   getSprintPlanningTeamConfig,
   listSprintPlanningSessions,
   runSprintPlanningConnectorAction,
+  saveSprintPlanningTeamConfig,
   saveSprintPlanningSession
 } from "./sprintPlanningApi";
 import { calculatePlanning, toNumber, toSprintPlanningInput } from "./sprintPlanningCalculations";
@@ -407,6 +408,43 @@ export function SprintPlanningWorkflow() {
     }
   }
 
+  async function saveTeamConfig() {
+    setDraftStatus("Saving team connector config...");
+
+    try {
+      const payload = await saveSprintPlanningTeamConfig({
+        teamKey: form.teamKey,
+        teamName: form.teamName,
+        jira: {
+          projectKey: form.jiraProjectKey,
+          boardName: form.jiraBoardName
+        },
+        slack: {
+          channelName: form.slackChannel
+        },
+        defaults: {
+          teamMemberCount: form.teamMemberCount,
+          daysInSprintExcludingHolidays: form.daysInSprintExcludingHolidays
+        }
+      });
+      const config = payload.data;
+
+      setForm((current) => ({
+        ...current,
+        teamKey: config.teamKey,
+        teamName: config.teamName,
+        jiraProjectKey: config.jira.projectKey,
+        jiraBoardName: config.jira.boardName,
+        slackChannel: config.slack.channelName,
+        teamMemberCount: config.defaults.teamMemberCount,
+        daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays
+      }));
+      setDraftStatus("Team connector config saved for mock environment");
+    } catch {
+      setDraftStatus("Team connector config save failed");
+    }
+  }
+
   async function importJiraVelocityHistory() {
     setDraftStatus("Importing velocity history from Jira reporting...");
 
@@ -754,10 +792,16 @@ export function SprintPlanningWorkflow() {
       <section className="planning-grid">
         <form className="planning-form">
           <SectionTitle icon={Settings2} title="Team connectors" />
-          <button className="inline-action" type="button" onClick={loadTeamConfig}>
-            <Settings2 size={16} />
-            Load team config
-          </button>
+          <div className="inline-actions">
+            <button className="inline-action" type="button" onClick={loadTeamConfig}>
+              <Settings2 size={16} />
+              Load team config
+            </button>
+            <button className="inline-action" type="button" onClick={saveTeamConfig}>
+              <SaveIcon size={16} />
+              Save team config
+            </button>
+          </div>
           <div className="field-grid">
             <TextField
               label="Team key"

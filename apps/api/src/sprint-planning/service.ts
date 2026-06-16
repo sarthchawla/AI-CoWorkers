@@ -3,8 +3,7 @@ import { getSprintPlanningConnectorModeLabel } from "../connectors/connectorEnvi
 import {
   mockJiraSprintIds,
   mockJiraVelocityHistory,
-  mockSlackLeaveConfirmations,
-  mockTeamSprintPlanningConfigs
+  mockSlackLeaveConfirmations
 } from "../connectors/mockSprintPlanningData.js";
 
 function withJiraSprintId(row: (typeof mockJiraVelocityHistory)[number]) {
@@ -184,11 +183,4 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
       }
     ]
   };
-}
-
-export function getTeamSprintPlanningConfig(teamKey: string) {
-  return (
-    mockTeamSprintPlanningConfigs[teamKey as keyof typeof mockTeamSprintPlanningConfigs] ??
-    mockTeamSprintPlanningConfigs.pta
-  );
 }

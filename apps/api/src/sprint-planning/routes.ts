@@ -4,7 +4,8 @@ import {
   jiraReportingImportSchema,
   slackLeaveConfirmationImportSchema,
   sprintPlanningSchema,
-  sprintPlanningSessionSaveSchema
+  sprintPlanningSessionSaveSchema,
+  teamSprintPlanningConfigSchema
 } from "./schema.js";
 import {
   getSprintPlanningSession,
@@ -15,18 +16,48 @@ import {
 import {
   calculateSprintPlanning,
   createJiraReportingImportPreview,
-  createSlackLeaveConfirmationImportPreview,
-  getTeamSprintPlanningConfig
+  createSlackLeaveConfirmationImportPreview
 } from "./service.js";
+import { getTeamSprintPlanningConfig, saveTeamSprintPlanningConfig } from "./teamConfigRepository.js";
 
 export const sprintPlanningRouter = Router();
 
-sprintPlanningRouter.get("/team-config/:teamKey", (request, response) => {
-  response.json({
-    status: "success",
-    data: getTeamSprintPlanningConfig(request.params.teamKey)
-  });
+sprintPlanningRouter.get("/team-config/:teamKey", async (request, response, next) => {
+  try {
+    response.json({
+      status: "success",
+      data: await getTeamSprintPlanningConfig(request.params.teamKey)
+    });
+  } catch (error) {
+    next(error);
+  }
 });
+
+async function saveTeamConfig(request: Request, response: Response, next: NextFunction) {
+  const body = request.params.teamKey ? { ...request.body, teamKey: request.params.teamKey } : request.body;
+  const parsedInput = teamSprintPlanningConfigSchema.safeParse(body);
+
+  if (!parsedInput.success) {
+    response.status(400).json({
+      status: "error",
+      message: "Invalid team sprint-planning config input",
+      errors: parsedInput.error.flatten()
+    });
+    return;
+  }
+
+  try {
+    response.json({
+      status: "success",
+      data: await saveTeamSprintPlanningConfig(parsedInput.data)
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+sprintPlanningRouter.post("/team-config", saveTeamConfig);
+sprintPlanningRouter.put("/team-config/:teamKey", saveTeamConfig);
 
 sprintPlanningRouter.get("/sessions", async (request, response, next) => {
   try {

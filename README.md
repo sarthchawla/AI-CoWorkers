@@ -50,12 +50,14 @@ Set `SPRINT_PLANNING_CONNECTOR_MODE=mock` to run Sprint Planning without real Ji
 - Jira sprint IDs, closed story points, and the last three sprint velocities.
 - Slack leave-confirmation responses, including confirmed, pending, and Scrum Master-adjusted rows.
 - Saved-session connector actions for closing the previous sprint, fetching story points, and collecting leave updates.
+- Team-level Jira project, Jira board, Slack channel, and default capacity settings persisted in `SPRINT_PLANNING_TEAM_CONFIG_FILE`.
 
 This keeps the web workflow testable while Jira API/MCP and Slack API/MCP adapters are still pending.
 
 Current preview APIs:
 
 - `GET /api/coworkers/scrum-master/sprint-planning/team-config/:teamKey`
+- `PUT /api/coworkers/scrum-master/sprint-planning/team-config/:teamKey`
 - `GET /api/coworkers/scrum-master/sprint-planning/sessions?teamKey=pta`
 - `GET /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId`
 - `POST /api/coworkers/scrum-master/sprint-planning/sessions`
@@ -97,4 +99,4 @@ The web app runs on `http://localhost:5173` and the API runs on `http://localhos
 
 ## Current Status
 
-The repo contains the first sprint-planning workflow slice: a React workbench, a TypeScript API route, sprint velocity calculation, saved planning sessions, connector-ready action plan, Jira/Slack configuration placeholders, and a Postgres schema design for durable planning sessions.
+The repo contains the first sprint-planning workflow slice: a React workbench, a TypeScript API route, sprint velocity calculation, saved planning sessions, configurable team Jira/Slack defaults, connector-ready action plan, mock connector fixtures, and a Postgres schema design for durable planning sessions.

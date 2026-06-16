@@ -10,6 +10,7 @@ import type {
   SprintPlanningConnectorActionResponse,
   SprintPlanningInput,
   TeamConfigResponse,
+  TeamSprintPlanningConfig,
   VelocityHistoryRow
 } from "./sprintPlanningTypes";
 
@@ -19,6 +20,26 @@ export async function getSprintPlanningTeamConfig(teamKey: string) {
 
   if (!response.ok) {
     throw new Error(payload.status || "Team config load failed");
+  }
+
+  return payload;
+}
+
+export async function saveSprintPlanningTeamConfig(input: TeamSprintPlanningConfig) {
+  const response = await fetch(
+    `/api/coworkers/scrum-master/sprint-planning/team-config/${encodeURIComponent(input.teamKey)}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const payload = (await response.json()) as TeamConfigResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.status || "Team config save failed");
   }
 
   return payload;
