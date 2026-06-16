@@ -1,0 +1,244 @@
+:root {
+  color: #182033;
+  background: #f7f8f4;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+a {
+  color: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(247, 248, 244, 0.12), #f7f8f4 82%),
+    url("/ai-evolution-coworker.png");
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-size: min(1240px, 100%) auto;
+}
+
+.hero {
+  display: flex;
+  align-items: flex-end;
+  min-height: 74vh;
+  padding: 44vh 24px 72px;
+}
+
+.hero-content,
+.section,
+.architecture {
+  width: min(1120px, calc(100% - 48px));
+  margin: 0 auto;
+}
+
+.hero-content {
+  max-width: 760px;
+  margin-left: max(24px, calc((100vw - 1120px) / 2));
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: #386268;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  max-width: 760px;
+  margin-bottom: 18px;
+  color: #101729;
+  font-size: clamp(2.6rem, 7vw, 5.4rem);
+  line-height: 0.96;
+  letter-spacing: 0;
+}
+
+h2 {
+  color: #141a2a;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+h3 {
+  margin-bottom: 10px;
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+
+.hero-copy,
+.section-heading p,
+.workflow-card p {
+  color: #4a5364;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.hero-copy {
+  max-width: 620px;
+  font-size: 1.12rem;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.hero-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid #111827;
+  border-radius: 8px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 0.94rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.hero-actions .secondary-action {
+  background: rgba(255, 255, 255, 0.82);
+  color: #111827;
+}
+
+.section {
+  padding: 72px 0 40px;
+}
+
+.section-heading {
+  max-width: 760px;
+  margin-bottom: 30px;
+}
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.workflow-card {
+  min-height: 220px;
+  padding: 24px;
+  border: 1px solid #d9ded1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 14px 36px rgba(24, 32, 51, 0.08);
+}
+
+.icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 22px;
+  border-radius: 8px;
+  background: #e7f1f2;
+  color: #245a61;
+}
+
+.architecture {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 52px 0 80px;
+}
+
+.architecture h2 {
+  max-width: 720px;
+  margin-bottom: 0;
+}
+
+.stack-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: min(360px, 100%);
+}
+
+.stack-list span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #cfd8d5;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #253044;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+@media (max-width: 860px) {
+  .hero {
+    min-height: 70vh;
+    padding-top: 34vh;
+  }
+
+  .workflow-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .architecture {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stack-list {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .app-shell {
+    background-size: 760px auto;
+  }
+
+  .hero {
+    min-height: 72vh;
+    padding: 260px 18px 48px;
+  }
+
+  .hero-content,
+  .section,
+  .architecture {
+    width: calc(100% - 36px);
+  }
+
+  .workflow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-card {
+    min-height: 0;
+  }
+}
+

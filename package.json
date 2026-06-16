@@ -1,0 +1,17 @@
+{
+  "name": "ai-coworkers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI coworkers for engineering workflows, starting with a Jira-focused Scrum Master.",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @ai-coworkers/web --filter @ai-coworkers/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "pnpm@10.12.1"
+}
+
