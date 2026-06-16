@@ -47,6 +47,7 @@ Current preview APIs:
 
 - `GET /api/coworkers/scrum-master/sprint-planning/team-config/:teamKey`
 - `POST /api/coworkers/scrum-master/sprint-planning/jira-reporting/import-preview`
+- `POST /api/coworkers/scrum-master/sprint-planning/slack/leave-confirmations/import-preview`
 - `POST /api/coworkers/scrum-master/sprint-planning/workflow-draft`
 
 ## Product Direction

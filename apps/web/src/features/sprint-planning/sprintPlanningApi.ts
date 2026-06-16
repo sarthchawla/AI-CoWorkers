@@ -1,6 +1,7 @@
 import type {
   DraftResponse,
   JiraReportingImportResponse,
+  SlackLeaveConfirmationImportResponse,
   SprintPlanningInput,
   TeamConfigResponse
 } from "./sprintPlanningTypes";
@@ -56,6 +57,28 @@ export async function getJiraVelocityHistory(input: {
 
   if (!response.ok) {
     throw new Error(payload.status || "Jira velocity history import failed");
+  }
+
+  return payload;
+}
+
+export async function getSlackLeaveConfirmations(input: {
+  teamKey: string;
+  slackChannel: string;
+  previousSprintName: string;
+  currentSprintName: string;
+}) {
+  const response = await fetch("/api/coworkers/scrum-master/sprint-planning/slack/leave-confirmations/import-preview", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+  const payload = (await response.json()) as SlackLeaveConfirmationImportResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.status || "Slack leave confirmation import failed");
   }
 
   return payload;

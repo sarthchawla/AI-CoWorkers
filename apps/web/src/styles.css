@@ -309,19 +309,24 @@ h1 {
   box-shadow: 0 0 0 3px rgba(42, 104, 112, 0.13);
 }
 
-.velocity-history {
+.velocity-history,
+.leave-confirmations {
   margin-bottom: 22px;
   border: 1px solid #dbe1db;
   border-radius: 8px;
   background: #fbfcf8;
+  overflow-x: auto;
 }
 
-.velocity-history table {
+.velocity-history table,
+.leave-confirmations table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 520px;
 }
 
-.velocity-history caption {
+.velocity-history caption,
+.leave-confirmations caption {
   padding: 14px 14px 6px;
   color: #172033;
   font-size: 0.92rem;
@@ -330,26 +335,31 @@ h1 {
 }
 
 .velocity-history th,
-.velocity-history td {
+.velocity-history td,
+.leave-confirmations th,
+.leave-confirmations td {
   padding: 12px 14px;
   border-top: 1px solid #edf0ea;
   text-align: left;
   vertical-align: middle;
 }
 
-.velocity-history thead th {
+.velocity-history thead th,
+.leave-confirmations thead th {
   color: #596273;
   font-size: 0.78rem;
   font-weight: 850;
   text-transform: uppercase;
 }
 
-.velocity-history tbody th {
+.velocity-history tbody th,
+.leave-confirmations tbody th {
   width: 70%;
   font-weight: 750;
 }
 
-.velocity-history small {
+.velocity-history small,
+.leave-confirmations small {
   display: block;
   margin-top: 5px;
   color: #596273;
@@ -357,7 +367,8 @@ h1 {
   line-height: 1.4;
 }
 
-.velocity-history input[type="number"] {
+.velocity-history input[type="number"],
+.leave-confirmations input[type="number"] {
   width: 112px;
   min-height: 42px;
   padding: 0 10px;
@@ -368,7 +379,8 @@ h1 {
   text-align: right;
 }
 
-.velocity-history p {
+.velocity-history p,
+.leave-confirmations p {
   margin: 0;
   padding: 0 14px 14px;
   color: #596273;
@@ -404,6 +416,11 @@ h1 {
 .source-pill.manual {
   background: #f4efe6;
   color: #6c4a1f;
+}
+
+.source-pill.mock-slack-thread {
+  background: #eaf1fb;
+  color: #254f82;
 }
 
 .output-column {

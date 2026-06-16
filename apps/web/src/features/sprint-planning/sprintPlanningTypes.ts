@@ -154,6 +154,30 @@ export type JiraReportingImportResponse = {
   };
 };
 
+export type LeaveConfirmationRow = {
+  teammateName: string;
+  slackUserId: string;
+  previousSprintLeaveDays: number;
+  upcomingSprintLeaveDays: number;
+  confirmationStatus: "pending" | "confirmed" | "updated_by_sm";
+  source: "manual" | "mock-slack-thread";
+};
+
+export type SlackLeaveConfirmationImportResponse = {
+  status: string;
+  data: {
+    channelName: string;
+    importedAt: string;
+    requestPreview: string;
+    confirmations: LeaveConfirmationRow[];
+    formPatch: {
+      previousSprintLeaveDays: number;
+      upcomingSprintLeaveDays: number;
+    };
+    warnings: string[];
+  };
+};
+
 export type PlanningResult = {
   averageNetVelocity: number;
   baselineCapacityDays: number;

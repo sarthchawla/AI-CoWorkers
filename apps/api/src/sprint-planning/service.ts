@@ -1,4 +1,4 @@
-import type { JiraReportingImportInput, SprintPlanningInput } from "./schema.js";
+import type { JiraReportingImportInput, SlackLeaveConfirmationImportInput, SprintPlanningInput } from "./schema.js";
 
 const teamSprintPlanningConfigs = {
   pta: {
@@ -57,6 +57,49 @@ const mockJiraSprintIds: Record<string, string> = {
   "Q2S6 - 2026": "jira-sprint-206"
 };
 
+const mockSlackLeaveConfirmations = [
+  {
+    teammateName: "Anika",
+    slackUserId: "U-ANIKA",
+    previousSprintLeaveDays: 0,
+    upcomingSprintLeaveDays: 1,
+    confirmationStatus: "confirmed",
+    source: "mock-slack-thread"
+  },
+  {
+    teammateName: "Dev",
+    slackUserId: "U-DEV",
+    previousSprintLeaveDays: 1,
+    upcomingSprintLeaveDays: 0,
+    confirmationStatus: "confirmed",
+    source: "mock-slack-thread"
+  },
+  {
+    teammateName: "Mei",
+    slackUserId: "U-MEI",
+    previousSprintLeaveDays: 0.5,
+    upcomingSprintLeaveDays: 1,
+    confirmationStatus: "updated_by_sm",
+    source: "mock-slack-thread"
+  },
+  {
+    teammateName: "Ravi",
+    slackUserId: "U-RAVI",
+    previousSprintLeaveDays: 0,
+    upcomingSprintLeaveDays: 0,
+    confirmationStatus: "pending",
+    source: "mock-slack-thread"
+  },
+  {
+    teammateName: "Sara",
+    slackUserId: "U-SARA",
+    previousSprintLeaveDays: 0.5,
+    upcomingSprintLeaveDays: 1,
+    confirmationStatus: "confirmed",
+    source: "mock-slack-thread"
+  }
+];
+
 function withJiraSprintId(row: (typeof mockJiraVelocityHistory)[number]) {
   return {
     ...row,
@@ -88,6 +131,36 @@ export function createJiraReportingImportPreview(input: JiraReportingImportInput
     warnings: [
       "Using mock Jira reporting data until Jira API or MCP connector is configured.",
       `Previous sprint requested: ${input.previousSprintName}`
+    ]
+  };
+}
+
+export function createSlackLeaveConfirmationImportPreview(input: SlackLeaveConfirmationImportInput) {
+  const previousSprintLeaveDays = mockSlackLeaveConfirmations.reduce(
+    (sum, row) => sum + row.previousSprintLeaveDays,
+    0
+  );
+  const upcomingSprintLeaveDays = mockSlackLeaveConfirmations.reduce(
+    (sum, row) => sum + row.upcomingSprintLeaveDays,
+    0
+  );
+
+  return {
+    channelName: input.slackChannel,
+    importedAt: new Date().toISOString(),
+    requestPreview: [
+      `Hi team, please confirm leave updates for ${input.previousSprintName} and ${input.currentSprintName}.`,
+      "Reply with previous sprint leave corrections and upcoming sprint leave days.",
+      "The Scrum Master will review the collected values before finalizing sprint velocity."
+    ].join("\n"),
+    confirmations: mockSlackLeaveConfirmations,
+    formPatch: {
+      previousSprintLeaveDays,
+      upcomingSprintLeaveDays
+    },
+    warnings: [
+      "Using mock Slack thread data until Slack API or MCP connector is configured.",
+      `Slack channel requested: ${input.slackChannel}`
     ]
   };
 }

@@ -1,7 +1,12 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { jiraReportingImportSchema, sprintPlanningSchema } from "./schema.js";
-import { calculateSprintPlanning, createJiraReportingImportPreview, getTeamSprintPlanningConfig } from "./service.js";
+import { jiraReportingImportSchema, slackLeaveConfirmationImportSchema, sprintPlanningSchema } from "./schema.js";
+import {
+  calculateSprintPlanning,
+  createJiraReportingImportPreview,
+  createSlackLeaveConfirmationImportPreview,
+  getTeamSprintPlanningConfig
+} from "./service.js";
 
 export const sprintPlanningRouter = Router();
 
@@ -27,6 +32,24 @@ sprintPlanningRouter.post("/jira-reporting/import-preview", (request, response) 
   response.json({
     status: "success",
     data: createJiraReportingImportPreview(parsedInput.data)
+  });
+});
+
+sprintPlanningRouter.post("/slack/leave-confirmations/import-preview", (request, response) => {
+  const parsedInput = slackLeaveConfirmationImportSchema.safeParse(request.body);
+
+  if (!parsedInput.success) {
+    response.status(400).json({
+      status: "error",
+      message: "Invalid Slack leave confirmation import input",
+      errors: parsedInput.error.flatten()
+    });
+    return;
+  }
+
+  response.json({
+    status: "success",
+    data: createSlackLeaveConfirmationImportPreview(parsedInput.data)
   });
 });
 

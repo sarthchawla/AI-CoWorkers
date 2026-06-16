@@ -19,10 +19,17 @@ import {
 import {
   createSprintPlanningWorkflowDraft,
   getJiraVelocityHistory,
+  getSlackLeaveConfirmations,
   getSprintPlanningTeamConfig
 } from "./sprintPlanningApi";
 import { calculatePlanning, toNumber, toSprintPlanningInput } from "./sprintPlanningCalculations";
-import type { AutomationStep, DraftResponse, PlanningForm, VelocityHistoryRow } from "./sprintPlanningTypes";
+import type {
+  AutomationStep,
+  DraftResponse,
+  LeaveConfirmationRow,
+  PlanningForm,
+  VelocityHistoryRow
+} from "./sprintPlanningTypes";
 
 const initialForm: PlanningForm = {
   teamKey: "pta",
@@ -118,6 +125,49 @@ const initialVelocityHistory: VelocityHistoryRow[] = [
   }
 ];
 
+const initialLeaveConfirmations: LeaveConfirmationRow[] = [
+  {
+    teammateName: "Anika",
+    slackUserId: "U-ANIKA",
+    previousSprintLeaveDays: 0,
+    upcomingSprintLeaveDays: 1,
+    confirmationStatus: "confirmed",
+    source: "manual"
+  },
+  {
+    teammateName: "Dev",
+    slackUserId: "U-DEV",
+    previousSprintLeaveDays: 1,
+    upcomingSprintLeaveDays: 0,
+    confirmationStatus: "confirmed",
+    source: "manual"
+  },
+  {
+    teammateName: "Mei",
+    slackUserId: "U-MEI",
+    previousSprintLeaveDays: 0.5,
+    upcomingSprintLeaveDays: 1,
+    confirmationStatus: "updated_by_sm",
+    source: "manual"
+  },
+  {
+    teammateName: "Ravi",
+    slackUserId: "U-RAVI",
+    previousSprintLeaveDays: 0,
+    upcomingSprintLeaveDays: 0,
+    confirmationStatus: "pending",
+    source: "manual"
+  },
+  {
+    teammateName: "Sara",
+    slackUserId: "U-SARA",
+    previousSprintLeaveDays: 0.5,
+    upcomingSprintLeaveDays: 1,
+    confirmationStatus: "confirmed",
+    source: "manual"
+  }
+];
+
 const statusLabels: Record<AutomationStep["status"], string> = {
   ready: "Ready",
   "connector-pending": "Connector pending",
@@ -181,6 +231,7 @@ function fallbackSlackPreview(form: PlanningForm) {
 export function SprintPlanningWorkflow() {
   const [form, setForm] = useState(initialForm);
   const [velocityHistory, setVelocityHistory] = useState(initialVelocityHistory);
+  const [leaveConfirmations, setLeaveConfirmations] = useState(initialLeaveConfirmations);
   const [draftStatus, setDraftStatus] = useState("Not synced with API yet");
   const [apiPlan, setApiPlan] = useState<DraftResponse["data"] | null>(null);
   const planning = useMemo(() => calculatePlanning(form), [form]);
@@ -234,6 +285,36 @@ export function SprintPlanningWorkflow() {
 
     setVelocityHistory(nextRows);
     patchVelocityFields(nextRows);
+  }
+
+  function patchLeaveTotals(rows: LeaveConfirmationRow[]) {
+    setForm((current) => ({
+      ...current,
+      previousSprintLeaveDays: rows.reduce((sum, row) => sum + row.previousSprintLeaveDays, 0),
+      upcomingSprintLeaveDays: rows.reduce((sum, row) => sum + row.upcomingSprintLeaveDays, 0)
+    }));
+  }
+
+  function updateLeaveConfirmation(
+    slackUserId: string,
+    field: keyof Pick<LeaveConfirmationRow, "previousSprintLeaveDays" | "upcomingSprintLeaveDays">,
+    value: string
+  ) {
+    const nextRows = leaveConfirmations.map((row) => {
+      if (row.slackUserId !== slackUserId) {
+        return row;
+      }
+
+      return {
+        ...row,
+        [field]: toNumber(value),
+        confirmationStatus: "updated_by_sm" as const,
+        source: "manual" as const
+      };
+    });
+
+    setLeaveConfirmations(nextRows);
+    patchLeaveTotals(nextRows);
   }
 
   async function generateDraft() {
@@ -293,6 +374,28 @@ export function SprintPlanningWorkflow() {
       setDraftStatus("Imported last three sprint velocities from Jira reporting");
     } catch {
       setDraftStatus("Jira reporting import unavailable; keep editing velocity rows");
+    }
+  }
+
+  async function importSlackLeaveConfirmations() {
+    setDraftStatus("Collecting leave confirmations from Slack preview...");
+
+    try {
+      const payload = await getSlackLeaveConfirmations({
+        teamKey: form.teamKey,
+        slackChannel: form.slackChannel,
+        previousSprintName: form.previousSprintName,
+        currentSprintName: form.currentSprintName
+      });
+
+      setLeaveConfirmations(payload.data.confirmations);
+      setForm((current) => ({
+        ...current,
+        ...payload.data.formPatch
+      }));
+      setDraftStatus("Imported leave confirmations from mock Slack thread");
+    } catch {
+      setDraftStatus("Slack leave confirmation import unavailable; keep editing leave rows");
     }
   }
 
@@ -463,6 +566,10 @@ export function SprintPlanningWorkflow() {
               <Table2 size={16} />
               Import Jira velocity history
             </button>
+            <button className="inline-action" type="button" onClick={importSlackLeaveConfirmations}>
+              <MessageSquare size={16} />
+              Import Slack leave confirmations
+            </button>
           </div>
           <div className="velocity-history" aria-describedby="velocity-history-help">
             <table>
@@ -506,17 +613,61 @@ export function SprintPlanningWorkflow() {
               story points before the SM finalizes the override.
             </p>
           </div>
+          <div className="leave-confirmations" aria-describedby="leave-confirmations-help">
+            <table>
+              <caption>Slack leave confirmations</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Teammate</th>
+                  <th scope="col">Previous sprint</th>
+                  <th scope="col">Upcoming sprint</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaveConfirmations.map((row) => (
+                  <tr key={row.slackUserId}>
+                    <th scope="row">
+                      <span>{row.teammateName}</span>
+                      <small>
+                        {row.confirmationStatus.replaceAll("_", " ")} ·{" "}
+                        <span className={`source-pill ${row.source}`}>
+                          {row.source === "mock-slack-thread" ? "Mock Slack" : "Manual"}
+                        </span>
+                      </small>
+                    </th>
+                    <td>
+                      <input
+                        min="0"
+                        step="0.5"
+                        type="number"
+                        value={row.previousSprintLeaveDays}
+                        aria-label={`Previous sprint leave days for ${row.teammateName}`}
+                        onChange={(event) =>
+                          updateLeaveConfirmation(row.slackUserId, "previousSprintLeaveDays", event.target.value)
+                        }
+                      />
+                    </td>
+                    <td>
+                      <input
+                        min="0"
+                        step="0.5"
+                        type="number"
+                        value={row.upcomingSprintLeaveDays}
+                        aria-label={`Upcoming sprint leave days for ${row.teammateName}`}
+                        onChange={(event) =>
+                          updateLeaveConfirmation(row.slackUserId, "upcomingSprintLeaveDays", event.target.value)
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p id="leave-confirmations-help">
+              Table totals update the previous and upcoming sprint leave days used in capacity and Slack previews.
+            </p>
+          </div>
           <div className="field-grid velocity-controls">
-            <NumberField
-              label="Previous sprint leave days"
-              value={form.previousSprintLeaveDays}
-              onChange={(value) => updateNumber("previousSprintLeaveDays", value)}
-            />
-            <NumberField
-              label="Upcoming leave days"
-              value={form.upcomingSprintLeaveDays}
-              onChange={(value) => updateNumber("upcomingSprintLeaveDays", value)}
-            />
             <NumberField
               label="Confidence adjustment %"
               value={form.confidenceAdjustment}
