@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import { z } from "zod";
+import { sprintPlanningRouter } from "./sprint-planning/routes.js";
 
 dotenv.config();
 
@@ -54,6 +55,8 @@ app.post("/api/coworkers/scrum-master/ceremonies/:ceremony/run", (request, respo
     next: "Connect Jira auth and board configuration before running live analysis."
   });
 });
+
+app.use("/api/coworkers/scrum-master/sprint-planning", sprintPlanningRouter);
 
 app.listen(port, () => {
   console.log(`AI CoWorkers API listening on http://localhost:${port}`);

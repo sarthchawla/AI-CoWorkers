@@ -1,6 +1,6 @@
 :root {
-  color: #182033;
-  background: #f7f8f4;
+  color: #172033;
+  background: #f5f6f1;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -16,41 +16,128 @@ body {
   min-width: 320px;
 }
 
-a {
-  color: inherit;
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
 }
 
 .app-shell {
   min-height: 100vh;
+  padding-bottom: 56px;
   background:
-    linear-gradient(180deg, rgba(247, 248, 244, 0.12), #f7f8f4 82%),
+    linear-gradient(180deg, rgba(245, 246, 241, 0.22), #f5f6f1 460px),
     url("/ai-evolution-coworker.png");
   background-position: center top;
   background-repeat: no-repeat;
-  background-size: min(1240px, 100%) auto;
+  background-size: min(1180px, 100%) auto;
 }
 
-.hero {
+.topbar {
   display: flex;
-  align-items: flex-end;
-  min-height: 74vh;
-  padding: 44vh 24px 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 18px 0;
 }
 
-.hero-content,
-.section,
-.architecture {
-  width: min(1120px, calc(100% - 48px));
+.brand,
+.topbar-actions,
+.brand-mark,
+.section-title,
+.hero,
+.velocity-panel button,
+.metric,
+.final-metric,
+.step-row,
+.connector-links {
+  display: flex;
+  align-items: center;
+}
+
+.brand {
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-mark,
+.section-title span {
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #cbd6d1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #285e64;
+}
+
+.brand strong,
+.brand span {
+  display: block;
+}
+
+.brand strong {
+  color: #111827;
+  font-size: 1rem;
+}
+
+.brand span,
+.topbar-actions span,
+.field span,
+.metric span,
+.final-metric span,
+.velocity-panel small,
+.step-row small,
+.connector-card p {
+  color: #596273;
+}
+
+.brand span,
+.topbar-actions span {
+  font-size: 0.86rem;
+}
+
+.topbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.topbar-actions span,
+.connector-links span {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid #d5dad1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+  font-weight: 750;
+}
+
+.hero,
+.planning-grid {
+  width: min(1180px, calc(100% - 40px));
   margin: 0 auto;
 }
 
-.hero-content {
-  max-width: 760px;
-  margin-left: max(24px, calc((100vw - 1120px) / 2));
+.hero {
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 420px;
+  padding: 230px 0 34px;
+}
+
+.hero-copy {
+  max-width: 720px;
 }
 
 .eyebrow {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   color: #386268;
   font-size: 0.78rem;
   font-weight: 800;
@@ -66,179 +153,270 @@ p {
 }
 
 h1 {
-  max-width: 760px;
-  margin-bottom: 18px;
-  color: #101729;
-  font-size: clamp(2.6rem, 7vw, 5.4rem);
-  line-height: 0.96;
+  margin-bottom: 16px;
+  color: #111827;
+  font-size: clamp(2.5rem, 5vw, 4.8rem);
+  line-height: 0.98;
   letter-spacing: 0;
 }
 
-h2 {
-  color: #141a2a;
-  font-size: clamp(2rem, 4vw, 3.4rem);
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-h3 {
-  margin-bottom: 10px;
-  font-size: 1.05rem;
-  letter-spacing: 0;
-}
-
-.hero-copy,
-.section-heading p,
-.workflow-card p {
-  color: #4a5364;
-  font-size: 1rem;
+.hero-copy p:last-child {
+  max-width: 660px;
+  margin-bottom: 0;
+  color: #3f4858;
+  font-size: 1.06rem;
   line-height: 1.65;
 }
 
-.hero-copy {
-  max-width: 620px;
-  font-size: 1.12rem;
+.velocity-panel,
+.planning-form,
+.output-card {
+  border: 1px solid #d9ded1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.91);
+  box-shadow: 0 16px 44px rgba(23, 32, 51, 0.08);
 }
 
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 28px;
+.velocity-panel {
+  width: min(340px, 100%);
+  padding: 22px;
 }
 
-.hero-actions a {
-  display: inline-flex;
-  align-items: center;
+.panel-kicker {
+  color: #596273;
+  font-size: 0.83rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.velocity-panel strong {
+  display: block;
+  margin: 8px 0 2px;
+  color: #101729;
+  font-size: 4.4rem;
+  line-height: 1;
+}
+
+.velocity-panel p {
+  color: #465162;
+  line-height: 1.5;
+}
+
+.velocity-panel button {
   justify-content: center;
+  gap: 8px;
+  width: 100%;
   min-height: 44px;
-  padding: 0 18px;
+  margin: 8px 0 10px;
   border: 1px solid #111827;
   border-radius: 8px;
   background: #111827;
   color: #ffffff;
-  font-size: 0.94rem;
   font-weight: 800;
-  text-decoration: none;
 }
 
-.hero-actions .secondary-action {
-  background: rgba(255, 255, 255, 0.82);
-  color: #111827;
+.velocity-panel small {
+  display: block;
+  line-height: 1.4;
 }
 
-.section {
-  padding: 72px 0 40px;
-}
-
-.section-heading {
-  max-width: 760px;
-  margin-bottom: 30px;
-}
-
-.workflow-grid {
+.planning-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  gap: 18px;
 }
 
-.workflow-card {
-  min-height: 220px;
-  padding: 24px;
-  border: 1px solid #d9ded1;
+.planning-form,
+.output-card {
+  padding: 22px;
+}
+
+.planning-form {
+  align-self: start;
+}
+
+.section-title {
+  gap: 10px;
+  margin: 4px 0 18px;
+}
+
+.section-title span {
+  width: 34px;
+  height: 34px;
+  background: #e7f1f2;
+}
+
+.section-title h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 1.08rem;
+  letter-spacing: 0;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.field span {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 11px;
+  border: 1px solid #cdd5cf;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 14px 36px rgba(24, 32, 51, 0.08);
+  background: #ffffff;
+  color: #182033;
+  outline: none;
 }
 
-.icon-wrap {
+.field input:focus {
+  border-color: #2a6870;
+  box-shadow: 0 0 0 3px rgba(42, 104, 112, 0.13);
+}
+
+.output-column {
+  display: grid;
+  align-self: start;
+  gap: 18px;
+}
+
+.metric,
+.final-metric {
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 42px;
+  border-top: 1px solid #edf0ea;
+}
+
+.metric strong {
+  color: #172033;
+}
+
+.final-metric {
+  min-height: 76px;
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid #cbd6d1;
+  border-radius: 8px;
+  background: #eef5f4;
+}
+
+.final-metric strong {
+  color: #0f3f45;
+  font-size: 2.25rem;
+}
+
+.step-list {
+  display: grid;
+  gap: 14px;
+}
+
+.step-row {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.step-row p {
+  margin-bottom: 4px;
+  color: #242d3d;
+  line-height: 1.45;
+}
+
+.step-status {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  margin-bottom: 22px;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
-  background: #e7f1f2;
-  color: #245a61;
+  color: #ffffff;
 }
 
-.architecture {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 32px;
-  padding: 52px 0 80px;
+.step-status.ready,
+.step-status.replaced-by-app {
+  background: #2f7462;
 }
 
-.architecture h2 {
-  max-width: 720px;
-  margin-bottom: 0;
+.step-status.connector-pending {
+  background: #946331;
 }
 
-.stack-list {
-  display: flex;
+.step-status.team-input {
+  background: #4d6592;
+}
+
+.connector-card p {
+  line-height: 1.6;
+}
+
+.connector-links {
   flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: min(360px, 100%);
+  gap: 8px;
+  margin-top: 16px;
+  color: #4a5364;
 }
 
-.stack-list span {
+.connector-links span {
   display: inline-flex;
   align-items: center;
-  min-height: 38px;
-  padding: 0 13px;
-  border: 1px solid #cfd8d5;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #253044;
-  font-size: 0.9rem;
-  font-weight: 750;
+  font-size: 0.82rem;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 980px) {
   .hero {
-    min-height: 70vh;
-    padding-top: 34vh;
-  }
-
-  .workflow-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .architecture {
     align-items: flex-start;
     flex-direction: column;
+    padding-top: 210px;
   }
 
-  .stack-list {
-    justify-content: flex-start;
+  .planning-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .velocity-panel {
+    width: 100%;
   }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 680px) {
   .app-shell {
     background-size: 760px auto;
   }
 
+  .topbar,
+  .hero,
+  .planning-grid {
+    width: calc(100% - 28px);
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .hero {
-    min-height: 72vh;
-    padding: 260px 18px 48px;
+    min-height: 0;
+    padding-top: 250px;
   }
 
-  .hero-content,
-  .section,
-  .architecture {
-    width: calc(100% - 36px);
-  }
-
-  .workflow-grid {
+  .field-grid {
     grid-template-columns: 1fr;
   }
 
-  .workflow-card {
-    min-height: 0;
+  .velocity-panel strong {
+    font-size: 3.3rem;
   }
 }
-
