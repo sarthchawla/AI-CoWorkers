@@ -598,7 +598,7 @@ export function SprintPlanningWorkflow() {
         daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays,
         sprintNamingPattern: config.defaults.sprintNamingPattern ?? current.sprintNamingPattern
       }));
-      setDraftStatus("Team connector config saved for mock environment");
+      setDraftStatus("Team connector config saved for current environment");
     } catch {
       setDraftStatus("Team connector config save failed");
     }
@@ -648,7 +648,7 @@ export function SprintPlanningWorkflow() {
         ...current,
         ...payload.data.formPatch
       }));
-      setDraftStatus("Imported leave confirmations from mock Slack thread");
+      setDraftStatus("Imported leave confirmations from Slack preview");
       markDirty();
       return true;
     } catch {
@@ -1075,7 +1075,7 @@ export function SprintPlanningWorkflow() {
           <SectionTitle icon={ClipboardCheck} title="Close previous Jira sprint" />
           <div className="workflow-note">
             <strong>{form.previousSprintName}</strong>
-            <p>Close this sprint on {form.jiraBoardName}. Mock mode records the action in this saved session only.</p>
+            <p>Close this sprint on {form.jiraBoardName}. This connector records the action in this saved session.</p>
           </div>
           <div className="preview-list">
             <p>{apiOutput?.jiraCloseReportPreview.closeSprintAction ?? `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}</p>
@@ -1199,6 +1199,7 @@ export function SprintPlanningWorkflow() {
           <span>{form.teamKey}</span>
           <span>{form.jiraProjectKey}</span>
           <span>{form.slackChannel}</span>
+          <span className="environment-badge">Env: {connectorMode}</span>
         </div>
       </header>
 
@@ -1263,7 +1264,7 @@ export function SprintPlanningWorkflow() {
                 </div>
                 <div>
                   <dt>Connectors</dt>
-                  <dd>{connectorMode}</dd>
+                  <dd>Jira + Slack</dd>
                 </div>
               </dl>
             </article>
@@ -1381,7 +1382,7 @@ export function SprintPlanningWorkflow() {
                 ? "Save this planning session before running connectors."
                 : isDirty
                   ? "Save changes to run connectors against the latest saved session."
-                  : "Run mock connector actions now; Jira and Slack API/MCP adapters can replace these later."}
+                  : "Run connector actions now; Jira and Slack API/MCP adapters can replace these later."}
             </small>
           </div>
           <div className="connector-action-buttons">
@@ -1507,7 +1508,7 @@ export function SprintPlanningWorkflow() {
                 <p>{activeStep.description}</p>
               </div>
               {activeStep.connector ? (
-                <span className={`connector-mode-badge ${activeStep.connector}`}>Mock {activeStep.connector}</span>
+                <span className={`connector-mode-badge ${activeStep.connector}`}>{activeStep.connector} connector</span>
               ) : null}
             </div>
 
@@ -1559,14 +1560,14 @@ export function SprintPlanningWorkflow() {
           <article className="output-card">
             <SectionTitle icon={ClipboardCheck} title="Connector status" />
             <div className="connector-status-grid">
-              <span>Mode</span>
-              <strong>{connectorMode}</strong>
               <span>Jira</span>
-              <strong>Mock only</strong>
+              <strong>Session preview</strong>
               <span>Slack</span>
-              <strong>Mock only</strong>
+              <strong>Leave preview</strong>
             </div>
-            <p className="connector-status-note">Mock actions update this saved session only. They do not change Jira or Slack.</p>
+            <p className="connector-status-note">
+              Connector actions update this saved session. The active environment is shown in the top bar.
+            </p>
           </article>
 
           <article className="output-card">
@@ -1735,11 +1736,11 @@ function LeaveConfirmationsTable({
 function SourcePill({ source }: { source: VelocityHistoryRow["source"] | LeaveConfirmationRow["source"] }) {
   const label =
     source === "mock-jira-report"
-      ? "Mock Jira"
+      ? "Jira preview"
       : source === "jira_report"
         ? "Real Jira"
         : source === "mock-slack-thread"
-          ? "Mock Slack"
+          ? "Slack preview"
           : source === "slack_thread"
             ? "Real Slack"
             : "Manual";

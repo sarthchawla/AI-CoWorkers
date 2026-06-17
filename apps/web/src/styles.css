@@ -120,6 +120,13 @@ button {
   font-weight: 750;
 }
 
+.topbar-actions .environment-badge {
+  border-color: #2a6870;
+  background: #111827;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+
 .hero,
 .session-strip,
 .session-browser,
