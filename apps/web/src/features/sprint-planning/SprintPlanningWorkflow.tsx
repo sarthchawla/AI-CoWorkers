@@ -58,6 +58,7 @@ import {
   MetricBlock,
   PlanningStatusBadge,
   SectionHeading,
+  SourceBadge,
   SprintPlanCard,
   toPerDeveloperVelocity,
   VelocityHistoryEditor,
@@ -1068,13 +1069,10 @@ export function SprintPlanningWorkflow() {
       );
     }
 
-    if (activeStepId === "velocity-baseline" || activeStepId === "jira-reporting") {
+    if (activeStepId === "velocity-baseline") {
       return (
         <Stack gap="lg">
-          <SectionHeading
-            icon={Table2}
-            title={activeStepId === "jira-reporting" ? "Closed sprint net velocity/dev" : "Net velocity/dev baseline"}
-          />
+          <SectionHeading icon={Table2} title="Net velocity/dev baseline" />
           <Group gap="xs">
             <Button variant="light" leftSection={<Table2 size={16} />} onClick={importJiraVelocityHistory}>
               Import Jira velocity history
@@ -1085,6 +1083,64 @@ export function SprintPlanningWorkflow() {
             teamMemberCount={form.teamMemberCount}
             onChange={updateVelocityHistory}
           />
+        </Stack>
+      );
+    }
+
+    if (activeStepId === "jira-reporting") {
+      const lastClosedSprint = velocityHistory.find((row) => row.sprintOffset === -1);
+      const lastClosedNetVelocityPerDeveloper = toPerDeveloperVelocity(
+        lastClosedSprint?.netVelocity ?? form.lastNetVelocity,
+        form.teamMemberCount
+      );
+
+      return (
+        <Stack gap="lg">
+          <SectionHeading icon={Table2} title="Closed sprint Jira reporting" />
+          <Alert color="blue" variant="light" title="Pull completed story points">
+            This step is only for the closed previous sprint. Use the primary action to pull saved-session Jira
+            reporting, then edit the final net velocity/dev value before the velocity decision step.
+          </Alert>
+          <Paper withBorder radius="md" p="md">
+            <Group justify="space-between" align="flex-start" gap="md">
+              <Box>
+                <Title order={3} size="h4">
+                  {lastClosedSprint?.sprintName ?? form.previousSprintName}
+                </Title>
+                <Group gap="xs" mt={6}>
+                  <Text size="sm" c="dimmed">
+                    {lastClosedSprint?.completedStoryPoints ?? form.lastNetVelocity} completed SP ·{" "}
+                    {lastClosedSprint?.leaveDays ?? form.previousSprintLeaveDays} leave days
+                  </Text>
+                  {lastClosedSprint ? <SourceBadge source={lastClosedSprint.source} /> : null}
+                </Group>
+              </Box>
+              <Badge variant="light" color="blue">
+                Step 6 only
+              </Badge>
+            </Group>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="lg">
+              <NumberInput
+                label="Final -1 net velocity/dev"
+                description={`${lastClosedSprint?.netVelocity ?? form.lastNetVelocity} total net velocity`}
+                min={0}
+                step={0.5}
+                value={lastClosedNetVelocityPerDeveloper}
+                onChange={(value) =>
+                  updateVelocityHistory(-1, "netVelocity", String(Number(value || 0) * form.teamMemberCount))
+                }
+              />
+              <MetricBlock
+                label="Total sprint net velocity"
+                value={lastClosedSprint?.netVelocity ?? form.lastNetVelocity}
+                caption="Derived from the editable per-dev value"
+              />
+            </SimpleGrid>
+          </Paper>
+          <Text size="sm" c="dimmed">
+            Step 3 sets the three-sprint baseline. Step 6 replaces only the last closed sprint with Jira reporting
+            after the previous sprint has been closed.
+          </Text>
         </Stack>
       );
     }
