@@ -58,7 +58,6 @@ import {
   MetricBlock,
   PlanningStatusBadge,
   SectionHeading,
-  SourceBadge,
   SprintPlanCard,
   toPerDeveloperVelocity,
   VelocityHistoryEditor,
@@ -235,13 +234,6 @@ const workflowStepDefinitions: WorkflowStepDefinition[] = [
     primaryAction: "Confirm calendar"
   },
   {
-    id: "velocity-baseline",
-    title: "Review net velocity/dev baseline",
-    description: "Import or edit the -3, -2, and provisional -1 sprint net velocity/dev values used for the average.",
-    primaryAction: "Confirm baseline",
-    connector: "jira"
-  },
-  {
     id: "slack-leaves",
     title: "Collect Slack leave updates",
     description: "Pull leave confirmations, then edit each teammate row before capacity is recalculated.",
@@ -257,9 +249,9 @@ const workflowStepDefinitions: WorkflowStepDefinition[] = [
   },
   {
     id: "jira-reporting",
-    title: "Pull Jira net velocity/dev",
-    description: "Fetch reporting values for the closed sprint, then edit the final -1 net velocity per developer.",
-    primaryAction: "Pull net velocity/dev",
+    title: "Pull Jira velocity history",
+    description: "After the previous sprint is closed, pull and edit the -3, -2, and final -1 net velocity/dev values.",
+    primaryAction: "Pull Jira velocity history",
     connector: "jira"
   },
   {
@@ -897,12 +889,7 @@ export function SprintPlanningWorkflow() {
 
     if (activeStepId === "calendar") {
       calculateWorkingDays();
-      completeStep("calendar", "velocity-baseline");
-      return;
-    }
-
-    if (activeStepId === "velocity-baseline") {
-      completeStep("velocity-baseline", "slack-leaves");
+      completeStep("calendar", "slack-leaves");
       return;
     }
 
@@ -1069,10 +1056,14 @@ export function SprintPlanningWorkflow() {
       );
     }
 
-    if (activeStepId === "velocity-baseline") {
+    if (activeStepId === "jira-reporting") {
       return (
         <Stack gap="lg">
-          <SectionHeading icon={Table2} title="Net velocity/dev baseline" />
+          <SectionHeading icon={Table2} title="Jira velocity history" />
+          <Alert color="blue" variant="light" title="Update velocity after sprint closure">
+            This is the single velocity update step. After the previous sprint is closed, pull Jira reporting and edit
+            the -3, -2, and final -1 net velocity/dev values in one place before the velocity decision.
+          </Alert>
           <Group gap="xs">
             <Button variant="light" leftSection={<Table2 size={16} />} onClick={importJiraVelocityHistory}>
               Import Jira velocity history
@@ -1083,63 +1074,9 @@ export function SprintPlanningWorkflow() {
             teamMemberCount={form.teamMemberCount}
             onChange={updateVelocityHistory}
           />
-        </Stack>
-      );
-    }
-
-    if (activeStepId === "jira-reporting") {
-      const lastClosedSprint = velocityHistory.find((row) => row.sprintOffset === -1);
-      const lastClosedNetVelocityPerDeveloper = toPerDeveloperVelocity(
-        lastClosedSprint?.netVelocity ?? form.lastNetVelocity,
-        form.teamMemberCount
-      );
-
-      return (
-        <Stack gap="lg">
-          <SectionHeading icon={Table2} title="Closed sprint Jira reporting" />
-          <Alert color="blue" variant="light" title="Pull completed story points">
-            This step is only for the closed previous sprint. Use the primary action to pull saved-session Jira
-            reporting, then edit the final net velocity/dev value before the velocity decision step.
-          </Alert>
-          <Paper withBorder radius="md" p="md">
-            <Group justify="space-between" align="flex-start" gap="md">
-              <Box>
-                <Title order={3} size="h4">
-                  {lastClosedSprint?.sprintName ?? form.previousSprintName}
-                </Title>
-                <Group gap="xs" mt={6}>
-                  <Text size="sm" c="dimmed">
-                    {lastClosedSprint?.completedStoryPoints ?? form.lastNetVelocity} completed SP ·{" "}
-                    {lastClosedSprint?.leaveDays ?? form.previousSprintLeaveDays} leave days
-                  </Text>
-                  {lastClosedSprint ? <SourceBadge source={lastClosedSprint.source} /> : null}
-                </Group>
-              </Box>
-              <Badge variant="light" color="blue">
-                Step 6 only
-              </Badge>
-            </Group>
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="lg">
-              <NumberInput
-                label="Final -1 net velocity/dev"
-                description={`${lastClosedSprint?.netVelocity ?? form.lastNetVelocity} total net velocity`}
-                min={0}
-                step={0.5}
-                value={lastClosedNetVelocityPerDeveloper}
-                onChange={(value) =>
-                  updateVelocityHistory(-1, "netVelocity", String(Number(value || 0) * form.teamMemberCount))
-                }
-              />
-              <MetricBlock
-                label="Total sprint net velocity"
-                value={lastClosedSprint?.netVelocity ?? form.lastNetVelocity}
-                caption="Derived from the editable per-dev value"
-              />
-            </SimpleGrid>
-          </Paper>
           <Text size="sm" c="dimmed">
-            Step 3 sets the three-sprint baseline. Step 6 replaces only the last closed sprint with Jira reporting
-            after the previous sprint has been closed.
+            The final -1 row should reflect completed story points after closing {form.previousSprintName}. The -3 and
+            -2 rows remain editable in case Jira reporting or spillover context needs correction.
           </Text>
         </Stack>
       );

@@ -207,7 +207,6 @@ export type PlanningStatus = "draft" | "ready_for_review" | "finalized" | "publi
 export type WorkflowStepId =
   | "clone"
   | "calendar"
-  | "velocity-baseline"
   | "slack-leaves"
   | "jira-close"
   | "jira-reporting"
