@@ -107,6 +107,7 @@ export async function getSlackLeaveConfirmations(input: {
   slackChannel: string;
   previousSprintName: string;
   currentSprintName: string;
+  requestMessage?: string;
 }) {
   const response = await fetch("/api/coworkers/scrum-master/sprint-planning/slack/leave-confirmations/import-preview", {
     method: "POST",

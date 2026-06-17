@@ -353,6 +353,7 @@ export async function runSprintPlanningConnectorAction(
         ranAt: now,
         output: {
           requestPreview: preview.requestPreview,
+          thread: preview.thread,
           confirmations
         },
         warnings: preview.warnings

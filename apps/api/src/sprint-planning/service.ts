@@ -50,15 +50,24 @@ export function createSlackLeaveConfirmationImportPreview(input: SlackLeaveConfi
     (sum, row) => sum + row.upcomingSprintLeaveDays,
     0
   );
+  const requestPreview =
+    input.requestMessage?.trim() ||
+    [
+      `Hi team, please confirm leave updates for ${input.previousSprintName} and ${input.currentSprintName}.`,
+      "Reply with previous sprint leave corrections and upcoming sprint leave days.",
+      "The Scrum Master will review the collected values before finalizing sprint net velocity per developer."
+    ].join("\n");
 
   return {
     channelName: input.slackChannel,
     importedAt: new Date().toISOString(),
-    requestPreview: [
-      `Hi team, please confirm leave updates for ${input.previousSprintName} and ${input.currentSprintName}.`,
-      "Reply with previous sprint leave corrections and upcoming sprint leave days.",
-      "The Scrum Master will review the collected values before finalizing sprint net velocity per developer."
-    ].join("\n"),
+    requestPreview,
+    thread: {
+      channelName: input.slackChannel,
+      threadTs: `mock-thread-${input.previousSprintName.toLowerCase().replaceAll(" ", "-")}`,
+      readStrategy:
+        "Read replies from the leave request thread, map Slack user ids to teammates, parse previous/upcoming leave days, and keep unresolved replies as pending."
+    },
     confirmations: mockSlackLeaveConfirmations,
     formPatch: {
       previousSprintLeaveDays,

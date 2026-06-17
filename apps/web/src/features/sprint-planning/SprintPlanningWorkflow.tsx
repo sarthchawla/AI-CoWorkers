@@ -237,8 +237,8 @@ const workflowStepDefinitions: WorkflowStepDefinition[] = [
   {
     id: "slack-leaves",
     title: "Collect Slack leave updates",
-    description: "Pull leave confirmations, then edit each teammate row before capacity is recalculated.",
-    primaryAction: "Import Slack leaves",
+    description: "Edit the Slack request, send it to the configured channel, then read thread replies into editable rows.",
+    primaryAction: "Send/read Slack thread",
     connector: "slack"
   },
   {
@@ -324,11 +324,15 @@ function nextSprintName(previousSprintName: string, pattern: string) {
     .replaceAll("{year}", match[3]);
 }
 
-function fallbackSlackPreview(form: PlanningForm) {
+function createSlackLeaveRequestMessage(form: PlanningForm) {
   return [
-    `Hi team, please update leaves for ${form.previousSprintName} and ${form.currentSprintName}.`,
-    `Current plan has ${form.previousSprintLeaveDays} previous sprint leave days and ${form.upcomingSprintLeaveDays} upcoming sprint leave days recorded.`,
-    "Please reply with any corrections before sprint planning is finalized."
+    `Hi team, please confirm leave updates for ${form.previousSprintName} and ${form.currentSprintName}.`,
+    "",
+    "Please reply in this thread with:",
+    `- previous sprint leave corrections for ${form.previousSprintName}`,
+    `- planned leave days for ${form.currentSprintName}`,
+    "",
+    "Format example: previous 0.5, upcoming 1. The Scrum Master will review and edit values before finalizing net velocity/dev."
   ].join("\n");
 }
 
@@ -398,11 +402,15 @@ export function SprintPlanningWorkflow() {
   const [scrumMasterStatus, setScrumMasterStatus] = useState<ScrumMasterStatusResponse | null>(null);
   const [sessionSearch, setSessionSearch] = useState("");
   const [sessionStatusFilter, setSessionStatusFilter] = useState<PlanningStatus | "all">("all");
+  const [slackLeaveMessageDraft, setSlackLeaveMessageDraft] = useState(() =>
+    createSlackLeaveRequestMessage(initialForm)
+  );
+  const [slackThreadStatus, setSlackThreadStatus] = useState("No Slack thread read yet");
   const mobileStepper = useMediaQuery("(max-width: 48em)") ?? false;
   const planning = useMemo(() => calculatePlanning(form), [form]);
   const apiOutput = apiPlan?.output;
   const workflowChecklist = apiOutput?.checklist ?? workflowSteps;
-  const slackPreview = apiOutput?.slackLeaveRequestPreview ?? fallbackSlackPreview(form);
+  const slackPreview = slackLeaveMessageDraft;
   const activeStep = workflowStepDefinitions.find((step) => step.id === activeStepId) ?? workflowStepDefinitions[0];
   const summaryVelocity = isDirty ? planning.sprintVelocity : apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
   const summaryVelocityPerDeveloper = isDirty
@@ -677,39 +685,52 @@ export function SprintPlanningWorkflow() {
   }
 
   async function importSlackLeaveConfirmations() {
-    setDraftStatus("Collecting leave confirmations from Slack preview...");
+    setDraftStatus("Sending Slack request preview and reading thread replies...");
 
     try {
       const payload = await getSlackLeaveConfirmations({
         teamKey: form.teamKey,
         slackChannel: form.slackChannel,
         previousSprintName: form.previousSprintName,
-        currentSprintName: form.currentSprintName
+        currentSprintName: form.currentSprintName,
+        requestMessage: slackLeaveMessageDraft
       });
 
+      setSlackLeaveMessageDraft(payload.data.requestPreview);
+      setSlackThreadStatus(
+        `Read ${payload.data.confirmations.length} replies from ${payload.data.thread.channelName} thread ${payload.data.thread.threadTs}`
+      );
       setLeaveConfirmations(payload.data.confirmations);
       setForm((current) => ({
         ...current,
         ...payload.data.formPatch
       }));
-      setDraftStatus("Imported leave confirmations from Slack preview");
+      setDraftStatus("Read Slack thread replies into editable leave confirmations");
       markDirty();
       return true;
     } catch {
+      setSlackThreadStatus("Slack thread read unavailable; keep editing leave rows");
       setDraftStatus("Slack leave confirmation import unavailable; keep editing leave rows");
       return false;
     }
   }
 
   function clonePreviousSprint() {
-    setForm((current) => ({
-      ...current,
-      currentSprintName: nextSprintName(current.previousSprintName, current.sprintNamingPattern),
-      currentSprintStart: addDays(current.previousSprintStart, 14),
-      currentSprintEnd: addDays(current.previousSprintEnd, 14),
-      previousVelocityMinus3: current.previousVelocityMinus2,
-      previousVelocityMinus2: current.lastNetVelocity
-    }));
+    setForm((current) => {
+      const nextForm = {
+        ...current,
+        currentSprintName: nextSprintName(current.previousSprintName, current.sprintNamingPattern),
+        currentSprintStart: addDays(current.previousSprintStart, 14),
+        currentSprintEnd: addDays(current.previousSprintEnd, 14),
+        previousVelocityMinus3: current.previousVelocityMinus2,
+        previousVelocityMinus2: current.lastNetVelocity
+      };
+
+      setSlackLeaveMessageDraft(createSlackLeaveRequestMessage(nextForm));
+      setSlackThreadStatus("No Slack thread read yet");
+
+      return nextForm;
+    });
     setDraftStatus("Prepared current sprint from previous sprint context");
     markDirty();
   }
@@ -754,11 +775,15 @@ export function SprintPlanningWorkflow() {
   }
 
   function hydrateSavedSession(session: SavedSprintPlanningSession, statusMessage: string) {
+    const nextForm = toPlanningForm(session.input);
+
     setForm((current) => ({
-      ...toPlanningForm(session.input),
+      ...nextForm,
       jiraProjectName: current.jiraProjectName,
       sprintNamingPattern: current.sprintNamingPattern
     }));
+    setSlackLeaveMessageDraft(createSlackLeaveRequestMessage(nextForm));
+    setSlackThreadStatus("No Slack thread read yet");
     setVelocityHistory(session.velocityHistory);
     setLeaveConfirmations(session.leaveConfirmations);
     setPlanningStatus(session.planningStatus);
@@ -856,11 +881,11 @@ export function SprintPlanningWorkflow() {
     }
 
     const runningMessages: Record<SprintPlanningConnectorActionKey, string> = {
-      "collect-leaves": "Collecting saved-session Slack leave confirmations...",
+      "collect-leaves": "Reading saved-session Slack leave thread...",
       "fetch-closed-story-points": "Importing saved-session Jira net velocity/dev..."
     };
     const successMessages: Record<SprintPlanningConnectorActionKey, string> = {
-      "collect-leaves": "Slack leave confirmations updated in saved session",
+      "collect-leaves": "Slack thread replies updated in saved session",
       "fetch-closed-story-points": "Jira closed sprint net velocity/dev updated in saved session"
     };
 
@@ -880,7 +905,6 @@ export function SprintPlanningWorkflow() {
   }
 
   async function runSavedConnectorWorkflow() {
-    await runSavedConnectorAction("collect-leaves");
     await runSavedConnectorAction("fetch-closed-story-points");
   }
 
@@ -1086,11 +1110,41 @@ export function SprintPlanningWorkflow() {
       return (
         <Stack gap="lg">
           <SectionHeading icon={MessageSquare} title="Slack leave confirmations" />
+          <Alert color="blue" variant="light" title="How the Slack thread is read">
+            The Scrum Master edits the message, sends it to {form.slackChannel}, then the connector reads replies from
+            that message thread. Replies are mapped by Slack user id to teammates and parsed into previous sprint leave
+            corrections plus upcoming sprint leave days. Pending or unclear replies stay editable in the table.
+          </Alert>
+          <Textarea
+            label="Slack message to send"
+            description={`Configured channel: ${form.slackChannel}`}
+            value={slackLeaveMessageDraft}
+            onChange={(event) => {
+              setSlackLeaveMessageDraft(event.currentTarget.value);
+              setSlackThreadStatus("Message edited; send/read again to refresh leave confirmations");
+              markDirty();
+            }}
+            autosize
+            minRows={7}
+          />
           <Group gap="xs">
+            <Button
+              variant="default"
+              onClick={() => {
+                setSlackLeaveMessageDraft(createSlackLeaveRequestMessage(form));
+                setSlackThreadStatus("Draft regenerated; send/read again to refresh leave confirmations");
+                markDirty();
+              }}
+            >
+              Regenerate message
+            </Button>
             <Button variant="light" leftSection={<MessageSquare size={16} />} onClick={importSlackLeaveConfirmations}>
-              Import Slack leave confirmations
+              Send message and read thread
             </Button>
           </Group>
+          <Text size="sm" c="dimmed" aria-live="polite">
+            {slackThreadStatus}
+          </Text>
           <LeaveConfirmationEditor rows={leaveConfirmations} onChange={updateLeaveConfirmation} />
           <Alert color="blue" variant="light" title="Leave totals">
             Previous sprint: {form.previousSprintLeaveDays} days. Upcoming sprint: {form.upcomingSprintLeaveDays} days.
@@ -1413,21 +1467,13 @@ export function SprintPlanningWorkflow() {
                     <Text fw={750}>Connector actions</Text>
                     <Text size="sm" c="dimmed">
                       {sessionId == null
-                        ? "Save this planning session before running connectors."
+                        ? "Save this planning session before running Jira reads."
                         : isDirty
-                          ? "Save changes to run connectors against the latest saved session."
-                          : "Run connector actions against this saved session."}
+                          ? "Save changes to read Jira against the latest saved session."
+                          : "Run read-only Jira reporting against this saved session. Slack thread collection is handled in the Slack step so the message stays editable."}
                     </Text>
                   </Box>
                   <Group gap="xs">
-                    <Button
-                      variant="default"
-                      leftSection={<MessageSquare size={16} />}
-                      disabled={connectorActionsDisabled}
-                      onClick={() => runSavedConnectorAction("collect-leaves")}
-                    >
-                      Slack leaves
-                    </Button>
                     <Button
                       variant="default"
                       leftSection={<Table2 size={16} />}
@@ -1442,7 +1488,7 @@ export function SprintPlanningWorkflow() {
                       disabled={connectorActionsDisabled}
                       onClick={runSavedConnectorWorkflow}
                     >
-                      Run planning connectors
+                      Run Jira read
                     </Button>
                   </Group>
                 </Group>

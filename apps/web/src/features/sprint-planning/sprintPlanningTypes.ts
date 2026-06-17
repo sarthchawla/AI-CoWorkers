@@ -177,6 +177,11 @@ export type SlackLeaveConfirmationImportResponse = {
     channelName: string;
     importedAt: string;
     requestPreview: string;
+    thread: {
+      channelName: string;
+      threadTs: string;
+      readStrategy: string;
+    };
     confirmations: LeaveConfirmationRow[];
     formPatch: {
       previousSprintLeaveDays: number;
