@@ -99,7 +99,7 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
     "Please reply with any corrections before sprint planning is finalized."
   ].join("\n");
   const jiraCloseReportPreview = {
-    closeSprintAction: `Close ${input.previousSprintName} on ${input.jiraBoardName}`,
+    closeSprintAction: `Manually close ${input.previousSprintName} on ${input.jiraBoardName}`,
     reportingAction: `Fetch net velocity per developer for ${input.previousSprintName} in ${input.jiraProjectKey}`,
     lastNetVelocity: input.lastNetVelocity
   };
@@ -150,8 +150,8 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
       },
       {
         id: "close-previous-sprint",
-        status: "connector-pending",
-        label: `Close ${input.previousSprintName} on Jira board ${input.jiraBoardName}`
+        status: "team-input",
+        label: `Manually close ${input.previousSprintName} on Jira board ${input.jiraBoardName}`
       },
       {
         id: "fetch-last-net-velocity",
@@ -177,8 +177,8 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
       },
       {
         id: "close-previous-sprint",
-        status: "connector-pending",
-        label: `Close previous sprint on Jira board ${input.jiraBoardName}`
+        status: "team-input",
+        label: `Open Jira and manually close previous sprint on ${input.jiraBoardName}`
       },
       {
         id: "fetch-closed-story-points",

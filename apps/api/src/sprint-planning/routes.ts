@@ -157,13 +157,12 @@ sprintPlanningRouter.post(
 
     if (
       actionKey !== "collect-leaves" &&
-      actionKey !== "close-previous-sprint" &&
       actionKey !== "fetch-closed-story-points"
     ) {
       response.status(400).json({
         status: "error",
         message: "Unsupported sprint planning connector action",
-        supportedActions: ["collect-leaves", "close-previous-sprint", "fetch-closed-story-points"]
+        supportedActions: ["collect-leaves", "fetch-closed-story-points"]
       });
       return;
     }

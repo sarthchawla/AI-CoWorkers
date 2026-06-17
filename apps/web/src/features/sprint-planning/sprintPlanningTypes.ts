@@ -217,7 +217,6 @@ export type WorkflowStepState = "current" | "completed" | "available" | "locked"
 
 export type SprintPlanningConnectorActionKey =
   | "collect-leaves"
-  | "close-previous-sprint"
   | "fetch-closed-story-points";
 
 export type SprintPlanningConnectorActionResult = {

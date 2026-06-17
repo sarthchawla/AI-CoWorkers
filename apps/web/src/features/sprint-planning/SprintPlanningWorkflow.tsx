@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   AppShell,
+  Anchor,
   Badge,
   Box,
   Button,
@@ -129,9 +130,9 @@ const workflowSteps: AutomationStep[] = [
   },
   {
     id: "jira-close",
-    label: "Close the previous Jira sprint and read net velocity per developer from reporting.",
-    owner: "Jira connector",
-    status: "connector-pending"
+    label: "Open Jira and manually close the previous sprint before velocity import.",
+    owner: "Scrum Master",
+    status: "team-input"
   },
   {
     id: "velocity",
@@ -243,8 +244,8 @@ const workflowStepDefinitions: WorkflowStepDefinition[] = [
   {
     id: "jira-close",
     title: "Close Jira sprint",
-    description: "Record the previous sprint closure action against the saved planning session.",
-    primaryAction: "Close Jira sprint",
+    description: "Open Jira and close the previous sprint manually. The app stays read-only against Jira.",
+    primaryAction: "I closed it in Jira",
     connector: "jira"
   },
   {
@@ -370,6 +371,12 @@ function toPlanningForm(input: SprintPlanningInput): PlanningForm {
 
 function numberInputValue(value: string | number) {
   return String(value ?? "");
+}
+
+function createJiraSprintSearchUrl(form: PlanningForm) {
+  const jql = `project = ${form.jiraProjectKey} AND sprint = "${form.previousSprintName}"`;
+
+  return `https://agoda.atlassian.net/issues/?jql=${encodeURIComponent(jql)}`;
 }
 
 export function SprintPlanningWorkflow() {
@@ -850,12 +857,10 @@ export function SprintPlanningWorkflow() {
 
     const runningMessages: Record<SprintPlanningConnectorActionKey, string> = {
       "collect-leaves": "Collecting saved-session Slack leave confirmations...",
-      "close-previous-sprint": "Closing previous sprint in saved-session Jira preview...",
       "fetch-closed-story-points": "Importing saved-session Jira net velocity/dev..."
     };
     const successMessages: Record<SprintPlanningConnectorActionKey, string> = {
       "collect-leaves": "Slack leave confirmations updated in saved session",
-      "close-previous-sprint": "Previous sprint closure recorded in saved session",
       "fetch-closed-story-points": "Jira closed sprint net velocity/dev updated in saved session"
     };
 
@@ -876,7 +881,6 @@ export function SprintPlanningWorkflow() {
 
   async function runSavedConnectorWorkflow() {
     await runSavedConnectorAction("collect-leaves");
-    await runSavedConnectorAction("close-previous-sprint");
     await runSavedConnectorAction("fetch-closed-story-points");
   }
 
@@ -904,12 +908,8 @@ export function SprintPlanningWorkflow() {
     }
 
     if (activeStepId === "jira-close") {
-      const closed = await runSavedConnectorAction("close-previous-sprint");
-
-      if (closed) {
-        completeStep("jira-close", "jira-reporting");
-      }
-
+      completeStep("jira-close", "jira-reporting");
+      setDraftStatus("Previous sprint marked as manually closed; pull Jira velocity history next");
       return;
     }
 
@@ -1100,20 +1100,28 @@ export function SprintPlanningWorkflow() {
     }
 
     if (activeStepId === "jira-close") {
+      const jiraSprintUrl = createJiraSprintSearchUrl(form);
+
       return (
         <Stack gap="lg">
           <SectionHeading icon={ClipboardCheck} title="Close previous Jira sprint" />
-          <Alert color="teal" variant="light" title={form.previousSprintName}>
-            Close this sprint on {form.jiraBoardName}. This connector records the action in this saved session.
+          <Alert color="yellow" variant="light" title="Manual Jira action">
+            The app will not close sprints or write to Jira. Open the previous sprint in Jira, close it there, then come
+            back and continue to pull closed-sprint velocity history.
           </Alert>
           <Paper withBorder radius="md" p="md">
-            <Text size="sm">
-              {apiOutput?.jiraCloseReportPreview.closeSprintAction ??
-                `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}
-            </Text>
-            <Text size="sm" c="dimmed" mt={6}>
-              Connector action requires a saved session with no unsaved changes.
-            </Text>
+            <Stack gap="sm">
+              <Text fw={700}>{form.previousSprintName}</Text>
+              <Text size="sm" c="dimmed">
+                Board: {form.jiraBoardName} · Project: {form.jiraProjectKey}
+              </Text>
+              <Anchor href={jiraSprintUrl} target="_blank" rel="noreferrer" size="sm" fw={700}>
+                Open previous sprint in Jira
+              </Anchor>
+              <Text size="sm" c="dimmed">
+                After closing the sprint in Jira, use the primary action below to move to Jira velocity history import.
+              </Text>
+            </Stack>
           </Paper>
         </Stack>
       );
@@ -1193,7 +1201,7 @@ export function SprintPlanningWorkflow() {
             <Stack gap="xs" mt="md">
               <Text size="sm">
                 {apiOutput?.jiraCloseReportPreview.closeSprintAction ??
-                  `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}
+                  `Manually close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}
               </Text>
               <Text size="sm">
                 {apiOutput?.jiraCloseReportPreview.reportingAction ??
@@ -1422,14 +1430,6 @@ export function SprintPlanningWorkflow() {
                     </Button>
                     <Button
                       variant="default"
-                      leftSection={<ClipboardCheck size={16} />}
-                      disabled={connectorActionsDisabled}
-                      onClick={() => runSavedConnectorAction("close-previous-sprint")}
-                    >
-                      Close Jira sprint
-                    </Button>
-                    <Button
-                      variant="default"
                       leftSection={<Table2 size={16} />}
                       disabled={connectorActionsDisabled}
                       onClick={() => runSavedConnectorAction("fetch-closed-story-points")}
@@ -1501,7 +1501,6 @@ export function SprintPlanningWorkflow() {
                           <Button
                             disabled={
                               isConnectorRunning ||
-                              (activeStepId === "jira-close" && connectorActionsDisabled) ||
                               (activeStepId === "jira-reporting" && connectorActionsDisabled)
                             }
                             onClick={runActiveStepPrimaryAction}

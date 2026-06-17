@@ -1,7 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSprintPlanningConnectorModeLabel } from "../connectors/connectorEnvironment.js";
 import type { SprintPlanningSessionCloneInput, SprintPlanningSessionSaveInput } from "./schema.js";
 import {
   calculateSprintPlanning,
@@ -23,7 +22,6 @@ export type SprintPlanningSession = SprintPlanningSessionSaveInput & {
 
 export type SprintPlanningConnectorActionKey =
   | "collect-leaves"
-  | "close-previous-sprint"
   | "fetch-closed-story-points";
 
 export type SprintPlanningConnectorActionResult = {
@@ -414,31 +412,7 @@ export async function runSprintPlanningConnectorAction(
       };
     }
 
-    const jiraSprintId =
-      currentSession.velocityHistory.find((row) => row.sprintOffset === -1)?.jiraSprintId ??
-      `mock-${currentSession.input.previousSprintName.toLowerCase().replaceAll(" ", "-")}`;
-
-    actionResult = {
-      actionKey,
-      connector: "jira",
-      mode: "mock",
-      status: "done",
-      ranAt: now,
-      output: {
-        previousSprintName: currentSession.input.previousSprintName,
-        jiraBoardName: currentSession.input.jiraBoardName,
-        jiraSprintId
-      },
-      warnings: [
-        `Using ${getSprintPlanningConnectorModeLabel()} Jira sprint closure until Jira API or MCP connector is configured.`
-      ]
-    };
-
-    return {
-      ...currentSession,
-      connectorActions: upsertActionResult(currentSession.connectorActions, actionResult),
-      updatedAt: now
-    };
+    return currentSession;
   });
 
   return session && actionResult
