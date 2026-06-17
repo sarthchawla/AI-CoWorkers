@@ -66,10 +66,14 @@ export type DraftResponse = {
   data?: {
     output: {
       sprintVelocity: number;
+      sprintNetVelocityPerDeveloper?: number;
       averageNetVelocity: number;
+      averageNetVelocityPerDeveloper?: number;
       baselineCapacityDays: number;
       capacityAdjustedVelocity: number;
+      capacityAdjustedVelocityPerDeveloper?: number;
       confidenceAdjustedVelocity: number;
+      confidenceAdjustedVelocityPerDeveloper?: number;
       availableCapacityDays: number;
       velocitySource: string;
       velocityOverrideReason: string | null;
@@ -184,13 +188,17 @@ export type SlackLeaveConfirmationImportResponse = {
 
 export type PlanningResult = {
   averageNetVelocity: number;
+  averageNetVelocityPerDeveloper: number;
   baselineCapacityDays: number;
   availableCapacityDays: number;
   capacityAdjustedVelocity: number;
+  capacityAdjustedVelocityPerDeveloper: number;
   confidenceAdjustedVelocity: number;
+  confidenceAdjustedVelocityPerDeveloper: number;
   manualVelocityOverrideTotal: number | null;
   manualVelocityPerDeveloperOverride: number | null;
   sprintVelocity: number;
+  sprintNetVelocityPerDeveloper: number;
   velocitySource: string;
 };
 
@@ -235,6 +243,8 @@ export type SavedSprintPlanningSessionSummary = {
   };
   planningStatus: PlanningStatus;
   sprintVelocity: number;
+  sprintVelocityPerDeveloper: number;
+  teamMemberCount: number;
   pendingLeaveConfirmations: number;
   connectorPendingSteps: number;
   updatedAt: string;

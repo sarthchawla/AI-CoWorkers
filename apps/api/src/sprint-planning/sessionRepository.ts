@@ -112,6 +112,14 @@ function nextSprintName(previousSprintName: string) {
   return `Q${match[1]}S${Number(match[2]) + 1} - ${match[3]}`;
 }
 
+function roundVelocity(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function perDeveloperVelocity(value: number, teamMemberCount: number) {
+  return teamMemberCount > 0 ? roundVelocity(value / teamMemberCount) : 0;
+}
+
 function cloneVelocityHistory(session: SprintPlanningSession, currentSprintName: string) {
   const previousRows = session.velocityHistory;
   const minus2 = previousRows.find((row) => row.sprintOffset === -2);
@@ -200,23 +208,29 @@ export async function listSprintPlanningSessions(teamKey?: string) {
     : store.sessions;
 
   return sessions
-    .map((session) => ({
-      sessionId: session.sessionId,
-      teamKey: session.input.teamKey,
-      teamName: session.input.teamName,
-      currentSprintName: session.input.currentSprintName,
-      previousSprintName: session.input.previousSprintName,
-      currentSprintDates: session.input.currentSprintDates,
-      planningStatus: session.planningStatus,
-      sprintVelocity: calculateSprintPlanning(session.input).sprintVelocity,
-      pendingLeaveConfirmations: session.leaveConfirmations.filter(
-        (confirmation) => confirmation.confirmationStatus === "pending"
-      ).length,
-      connectorPendingSteps: serializeSprintPlanningSession(session).output.checklist.filter(
-        (step) => step.status === "connector-pending"
-      ).length,
-      updatedAt: session.updatedAt
-    }))
+    .map((session) => {
+      const sprintVelocity = calculateSprintPlanning(session.input).sprintVelocity;
+
+      return {
+        sessionId: session.sessionId,
+        teamKey: session.input.teamKey,
+        teamName: session.input.teamName,
+        currentSprintName: session.input.currentSprintName,
+        previousSprintName: session.input.previousSprintName,
+        currentSprintDates: session.input.currentSprintDates,
+        planningStatus: session.planningStatus,
+        sprintVelocity,
+        sprintVelocityPerDeveloper: perDeveloperVelocity(sprintVelocity, session.input.teamMemberCount),
+        teamMemberCount: session.input.teamMemberCount,
+        pendingLeaveConfirmations: session.leaveConfirmations.filter(
+          (confirmation) => confirmation.confirmationStatus === "pending"
+        ).length,
+        connectorPendingSteps: serializeSprintPlanningSession(session).output.checklist.filter(
+          (step) => step.status === "connector-pending"
+        ).length,
+        updatedAt: session.updatedAt
+      };
+    })
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 

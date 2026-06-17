@@ -8,6 +8,10 @@ function roundVelocity(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+function perDeveloperVelocity(value: number, teamMemberCount: number) {
+  return teamMemberCount > 0 ? roundVelocity(value / teamMemberCount) : 0;
+}
+
 function getManualVelocityOverride(form: PlanningForm) {
   if (form.manualVelocityPerDeveloperOverride.trim() === "") {
     return {
@@ -39,13 +43,20 @@ export function calculatePlanning(form: PlanningForm) {
 
   return {
     averageNetVelocity,
+    averageNetVelocityPerDeveloper: perDeveloperVelocity(averageNetVelocity, form.teamMemberCount),
     baselineCapacityDays,
     availableCapacityDays,
     capacityAdjustedVelocity,
+    capacityAdjustedVelocityPerDeveloper: perDeveloperVelocity(capacityAdjustedVelocity, form.teamMemberCount),
     confidenceAdjustedVelocity,
+    confidenceAdjustedVelocityPerDeveloper: perDeveloperVelocity(confidenceAdjustedVelocity, form.teamMemberCount),
     manualVelocityOverrideTotal: override.total,
     manualVelocityPerDeveloperOverride: override.perDeveloper,
     sprintVelocity: roundVelocity(override.total ?? confidenceAdjustedVelocity),
+    sprintNetVelocityPerDeveloper: perDeveloperVelocity(
+      roundVelocity(override.total ?? confidenceAdjustedVelocity),
+      form.teamMemberCount
+    ),
     velocitySource: override.total == null ? "System suggestion" : "Team override"
   };
 }

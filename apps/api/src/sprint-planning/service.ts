@@ -57,7 +57,7 @@ export function createSlackLeaveConfirmationImportPreview(input: SlackLeaveConfi
     requestPreview: [
       `Hi team, please confirm leave updates for ${input.previousSprintName} and ${input.currentSprintName}.`,
       "Reply with previous sprint leave corrections and upcoming sprint leave days.",
-      "The Scrum Master will review the collected values before finalizing sprint net velocity."
+      "The Scrum Master will review the collected values before finalizing sprint net velocity per developer."
     ].join("\n"),
     confirmations: mockSlackLeaveConfirmations,
     formPatch: {
@@ -75,6 +75,10 @@ function roundVelocity(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+function perDeveloperVelocity(value: number, teamMemberCount: number) {
+  return teamMemberCount > 0 ? roundVelocity(value / teamMemberCount) : 0;
+}
+
 export function calculateSprintPlanning(input: SprintPlanningInput) {
   const averageNetVelocity = roundVelocity(
     (input.previousVelocityMinus3 + input.previousVelocityMinus2 + input.lastNetVelocity) / 3
@@ -87,6 +91,7 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
     capacityAdjustedVelocity * (1 + input.confidenceAdjustment / 100)
   );
   const sprintVelocity = roundVelocity(input.manualVelocityOverride ?? confidenceAdjustedVelocity);
+  const sprintNetVelocityPerDeveloper = perDeveloperVelocity(sprintVelocity, input.teamMemberCount);
   const velocitySource = input.manualVelocityOverride == null ? "system-suggested" : "team-override";
   const slackLeaveRequestPreview = [
     `Hi team, please update leaves for ${input.previousSprintName} and ${input.currentSprintName}.`,
@@ -95,7 +100,7 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
   ].join("\n");
   const jiraCloseReportPreview = {
     closeSprintAction: `Close ${input.previousSprintName} on ${input.jiraBoardName}`,
-    reportingAction: `Fetch net velocity for ${input.previousSprintName} in ${input.jiraProjectKey}`,
+    reportingAction: `Fetch net velocity per developer for ${input.previousSprintName} in ${input.jiraProjectKey}`,
     lastNetVelocity: input.lastNetVelocity
   };
   const sprintCloneSummary = {
@@ -112,12 +117,16 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
 
   return {
     averageNetVelocity,
+    averageNetVelocityPerDeveloper: perDeveloperVelocity(averageNetVelocity, input.teamMemberCount),
     baselineCapacityDays,
     availableCapacityDays,
     capacityRatio: roundVelocity(capacityRatio),
     capacityAdjustedVelocity,
+    capacityAdjustedVelocityPerDeveloper: perDeveloperVelocity(capacityAdjustedVelocity, input.teamMemberCount),
     confidenceAdjustedVelocity,
+    confidenceAdjustedVelocityPerDeveloper: perDeveloperVelocity(confidenceAdjustedVelocity, input.teamMemberCount),
     sprintVelocity,
+    sprintNetVelocityPerDeveloper,
     velocitySource,
     velocityOverrideReason: input.manualVelocityOverride == null ? null : input.velocityOverrideReason?.trim() || null,
     sprintCloneSummary,
@@ -147,12 +156,12 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
       {
         id: "fetch-last-net-velocity",
         status: "connector-pending",
-        label: `Use Jira reporting value ${input.lastNetVelocity} as last net velocity`
+        label: `Use Jira reporting value ${perDeveloperVelocity(input.lastNetVelocity, input.teamMemberCount)} as last net velocity/dev`
       },
       {
         id: "finalize-sprint-velocity",
         status: "ready",
-        label: `Finalize sprint net velocity at ${sprintVelocity} (${velocitySource})`
+        label: `Finalize sprint net velocity/dev at ${sprintNetVelocityPerDeveloper} (${sprintVelocity} total, ${velocitySource})`
       }
     ],
     automationPlan: [
@@ -174,12 +183,12 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
       {
         id: "fetch-closed-story-points",
         status: "connector-pending",
-        label: `Fetch net velocity for ${input.previousSprintName} from Jira`
+        label: `Fetch net velocity per developer for ${input.previousSprintName} from Jira`
       },
       {
         id: "calculate-sprint-velocity",
         status: "ready",
-        label: "Calculate average, capacity-adjusted, and final sprint net velocity"
+        label: "Calculate average, capacity-adjusted, and final sprint net velocity per developer"
       }
     ]
   };
