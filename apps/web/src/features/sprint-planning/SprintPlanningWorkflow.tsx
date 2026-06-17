@@ -1,11 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import type { HTMLAttributes } from "react";
-import * as Tabs from "@radix-ui/react-tabs";
-import type { LucideIcon } from "lucide-react";
+import {
+  Alert,
+  AppShell,
+  Badge,
+  Box,
+  Button,
+  Container,
+  Grid,
+  Group,
+  Modal,
+  NumberInput,
+  Paper,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+  Title
+} from "@mantine/core";
+import { DateInput } from "@mantine/dates";
+import { useMediaQuery } from "@mantine/hooks";
 import {
   Bot,
   CalendarDays,
-  CheckCircle2,
   ClipboardCheck,
   Copy,
   FolderOpen,
@@ -15,6 +33,7 @@ import {
   MessageSquare,
   Plus,
   Save as SaveIcon,
+  Search,
   Settings2,
   Sparkles,
   Table2
@@ -22,26 +41,39 @@ import {
 import {
   cloneSprintPlanningSession,
   createSprintPlanningWorkflowDraft,
-  getSprintPlanningSession,
   getJiraVelocityHistory,
   getScrumMasterStatus,
   getSlackLeaveConfirmations,
+  getSprintPlanningSession,
   getSprintPlanningTeamConfig,
   listSprintPlanningSessions,
   runSprintPlanningConnectorAction,
-  saveSprintPlanningTeamConfig,
-  saveSprintPlanningSession
+  saveSprintPlanningSession,
+  saveSprintPlanningTeamConfig
 } from "./sprintPlanningApi";
 import { calculatePlanning, toNumber, toSprintPlanningInput } from "./sprintPlanningCalculations";
+import {
+  formatSavedAt,
+  LeaveConfirmationEditor,
+  MetricBlock,
+  PlanningStatusBadge,
+  SectionHeading,
+  SprintPlanCard,
+  toPerDeveloperVelocity,
+  VelocityHistoryEditor,
+  WorkflowStepper,
+  WorkflowSummary
+} from "./SprintPlannerComponents";
+import type { WorkflowStepDefinition } from "./SprintPlannerComponents";
 import type {
   AutomationStep,
   DraftResponse,
   LeaveConfirmationRow,
-  PlanningStatus,
   PlanningForm,
-  ScrumMasterStatusResponse,
+  PlanningStatus,
   SavedSprintPlanningSession,
   SavedSprintPlanningSessionSummary,
+  ScrumMasterStatusResponse,
   SprintPlanningConnectorActionKey,
   SprintPlanningInput,
   VelocityHistoryRow,
@@ -188,21 +220,7 @@ const initialLeaveConfirmations: LeaveConfirmationRow[] = [
   }
 ];
 
-const statusLabels: Record<AutomationStep["status"], string> = {
-  ready: "Ready",
-  "connector-pending": "Connector pending",
-  "team-input": "Team input",
-  "replaced-by-app": "Excel replaced",
-  done: "Done"
-};
-
-const workflowStepDefinitions: Array<{
-  id: WorkflowStepId;
-  title: string;
-  description: string;
-  primaryAction: string;
-  connector?: "jira" | "slack";
-}> = [
+const workflowStepDefinitions: WorkflowStepDefinition[] = [
   {
     id: "clone",
     title: "Start from previous sprint",
@@ -239,14 +257,14 @@ const workflowStepDefinitions: Array<{
   {
     id: "jira-reporting",
     title: "Pull Jira net velocity/dev",
-    description: "Fetch reporting values for the closed sprint, then edit the final -1 net velocity per developer if needed.",
+    description: "Fetch reporting values for the closed sprint, then edit the final -1 net velocity per developer.",
     primaryAction: "Pull net velocity/dev",
     connector: "jira"
   },
   {
     id: "velocity-decision",
     title: "Calculate net velocity/dev and override",
-    description: "Review the calculated net velocity per developer and apply a team-approved override when context supports it.",
+    description: "Review the calculated net velocity per developer and apply a team-approved override.",
     primaryAction: "Finalize net velocity/dev"
   },
   {
@@ -255,6 +273,13 @@ const workflowStepDefinitions: Array<{
     description: "Save the session, set review status, and inspect Slack/Jira previews before publishing later.",
     primaryAction: "Save final plan"
   }
+];
+
+const planningStatusOptions = [
+  { value: "draft", label: "Draft" },
+  { value: "ready_for_review", label: "Ready for review" },
+  { value: "finalized", label: "Finalized" },
+  { value: "published", label: "Published" }
 ];
 
 function addDays(dateValue: string, days: number) {
@@ -313,25 +338,12 @@ function fallbackSlackPreview(form: PlanningForm) {
   ].join("\n");
 }
 
-function formatSavedAt(value: string) {
-  return new Date(value).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
-
 function toPerDeveloperOverride(input: SprintPlanningInput) {
   if (input.manualVelocityOverride == null || input.teamMemberCount <= 0) {
     return "";
   }
 
   return String(Math.round((input.manualVelocityOverride / input.teamMemberCount) * 10) / 10);
-}
-
-function toPerDeveloperVelocity(value: number, teamMemberCount: number) {
-  return teamMemberCount > 0 ? Math.round((value / teamMemberCount) * 10) / 10 : 0;
 }
 
 function toPlanningForm(input: SprintPlanningInput): PlanningForm {
@@ -363,6 +375,10 @@ function toPlanningForm(input: SprintPlanningInput): PlanningForm {
   };
 }
 
+function numberInputValue(value: string | number) {
+  return String(value ?? "");
+}
+
 export function SprintPlanningWorkflow() {
   const [form, setForm] = useState(initialForm);
   const [velocityHistory, setVelocityHistory] = useState(initialVelocityHistory);
@@ -380,11 +396,39 @@ export function SprintPlanningWorkflow() {
   const [activeStepId, setActiveStepId] = useState<WorkflowStepId>("clone");
   const [completedStepIds, setCompletedStepIds] = useState<WorkflowStepId[]>([]);
   const [scrumMasterStatus, setScrumMasterStatus] = useState<ScrumMasterStatusResponse | null>(null);
+  const [sessionSearch, setSessionSearch] = useState("");
+  const [sessionStatusFilter, setSessionStatusFilter] = useState<PlanningStatus | "all">("all");
+  const mobileStepper = useMediaQuery("(max-width: 48em)") ?? false;
   const planning = useMemo(() => calculatePlanning(form), [form]);
   const apiOutput = apiPlan?.output;
   const workflowChecklist = apiOutput?.checklist ?? workflowSteps;
   const slackPreview = apiOutput?.slackLeaveRequestPreview ?? fallbackSlackPreview(form);
   const activeStep = workflowStepDefinitions.find((step) => step.id === activeStepId) ?? workflowStepDefinitions[0];
+  const summaryVelocity = isDirty ? planning.sprintVelocity : apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
+  const summaryVelocityPerDeveloper = isDirty
+    ? planning.sprintNetVelocityPerDeveloper
+    : apiPlan?.output.sprintNetVelocityPerDeveloper ?? toPerDeveloperVelocity(summaryVelocity, form.teamMemberCount);
+  const sessionLabel = sessionId == null ? "New planning session" : `${form.currentSprintName} saved draft`;
+  const lastSavedLabel = lastSavedAt === "" ? "Not saved yet" : `Last saved ${new Date(lastSavedAt).toLocaleString()}`;
+  const cloneDisabled = isDirty || isConnectorRunning;
+  const connectorActionsDisabled = sessionId == null || isDirty || isConnectorRunning;
+  const connectorMode = scrumMasterStatus?.sprintPlanningConnectorMode ?? "mock";
+  const activeStepIndex = workflowStepDefinitions.findIndex((step) => step.id === activeStepId);
+  const previousStep = workflowStepDefinitions[activeStepIndex - 1];
+  const visibleSavedSessions = useMemo(() => {
+    const search = sessionSearch.trim().toLowerCase();
+
+    return savedSessions.filter((session) => {
+      const matchesStatus = sessionStatusFilter === "all" || session.planningStatus === sessionStatusFilter;
+      const matchesSearch =
+        search === "" ||
+        session.currentSprintName.toLowerCase().includes(search) ||
+        session.previousSprintName.toLowerCase().includes(search) ||
+        session.teamName.toLowerCase().includes(search);
+
+      return matchesStatus && matchesSearch;
+    });
+  }, [savedSessions, sessionSearch, sessionStatusFilter]);
 
   useEffect(() => {
     getScrumMasterStatus()
@@ -907,898 +951,662 @@ export function SprintPlanningWorkflow() {
   function renderStepContent() {
     if (activeStepId === "clone") {
       return (
-        <>
-          <SectionTitle icon={Settings2} title="Team connectors" />
-          <div className="inline-actions">
-            <button className="inline-action" type="button" onClick={loadTeamConfig}>
-              <Settings2 size={16} aria-hidden="true" />
+        <Stack gap="lg">
+          <SectionHeading icon={Settings2} title="Team connectors" />
+          <Group gap="xs">
+            <Button variant="default" leftSection={<Settings2 size={16} />} onClick={loadTeamConfig}>
               Load team config
-            </button>
-            <button className="inline-action" type="button" onClick={saveTeamConfig}>
-              <SaveIcon size={16} aria-hidden="true" />
+            </Button>
+            <Button variant="light" leftSection={<SaveIcon size={16} />} onClick={saveTeamConfig}>
               Save team config
-            </button>
-          </div>
-          <div className="field-grid">
-            <TextField label="Team key" value={form.teamKey} onChange={(value) => updateText("teamKey", value)} />
-            <TextField label="Team" value={form.teamName} onChange={(value) => updateText("teamName", value)} />
-            <TextField
+            </Button>
+          </Group>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <TextInput label="Team key" value={form.teamKey} onChange={(event) => updateText("teamKey", event.currentTarget.value)} />
+            <TextInput label="Team" value={form.teamName} onChange={(event) => updateText("teamName", event.currentTarget.value)} />
+            <TextInput
               label="Team project name"
               value={form.jiraProjectName}
-              onChange={(value) => updateText("jiraProjectName", value)}
+              onChange={(event) => updateText("jiraProjectName", event.currentTarget.value)}
             />
-            <TextField
+            <TextInput
               label="Jira project key"
               value={form.jiraProjectKey}
-              onChange={(value) => updateText("jiraProjectKey", value)}
+              onChange={(event) => updateText("jiraProjectKey", event.currentTarget.value)}
             />
-            <TextField
+            <TextInput
               label="Jira board"
               value={form.jiraBoardName}
-              onChange={(value) => updateText("jiraBoardName", value)}
+              onChange={(event) => updateText("jiraBoardName", event.currentTarget.value)}
             />
-            <TextField
+            <TextInput
               label="Slack channel"
               value={form.slackChannel}
-              onChange={(value) => updateText("slackChannel", value)}
+              onChange={(event) => updateText("slackChannel", event.currentTarget.value)}
             />
-            <TextField
+            <TextInput
               label="Sprint naming pattern"
               placeholder="Q{quarter}S{sprint} - {year}"
               value={form.sprintNamingPattern}
-              onChange={(value) => updateText("sprintNamingPattern", value)}
+              onChange={(event) => updateText("sprintNamingPattern", event.currentTarget.value)}
             />
-          </div>
-          <div className="workflow-note">
-            <strong>Saved sprint source</strong>
-            <p>Use Open to choose a previous sprint session, then Clone to new sprint inside the saved-session browser.</p>
-          </div>
-        </>
+          </SimpleGrid>
+          <Alert variant="light" color="teal" title="Saved sprint source">
+            Use Open to choose a previous sprint session, then Clone to create the next sprint from saved context.
+          </Alert>
+        </Stack>
       );
     }
 
     if (activeStepId === "calendar") {
       return (
-        <>
-          <SectionTitle icon={CalendarDays} title="Sprint calendar" />
-          <div className="inline-actions">
-            <button className="inline-action" type="button" onClick={clonePreviousSprint}>
-              <Copy size={16} aria-hidden="true" />
+        <Stack gap="lg">
+          <SectionHeading icon={CalendarDays} title="Sprint calendar" />
+          <Group gap="xs">
+            <Button variant="default" leftSection={<Copy size={16} />} onClick={clonePreviousSprint}>
               Clone previous sprint context
-            </button>
-            <button className="inline-action" type="button" onClick={calculateWorkingDays}>
-              <CalendarDays size={16} aria-hidden="true" />
+            </Button>
+            <Button variant="light" leftSection={<CalendarDays size={16} />} onClick={calculateWorkingDays}>
               Calculate working days
-            </button>
-          </div>
-          <div className="field-grid">
-            <TextField
+            </Button>
+          </Group>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <TextInput
               label="Previous sprint"
               value={form.previousSprintName}
-              onChange={(value) => updateText("previousSprintName", value)}
+              onChange={(event) => updateText("previousSprintName", event.currentTarget.value)}
             />
-            <TextField
+            <TextInput
               label="Current sprint"
               value={form.currentSprintName}
-              onChange={(value) => updateText("currentSprintName", value)}
+              onChange={(event) => updateText("currentSprintName", event.currentTarget.value)}
             />
-            <TextField
+            <DateInput
               label="Previous start"
-              type="date"
               value={form.previousSprintStart}
-              onChange={(value) => updateText("previousSprintStart", value)}
+              valueFormat="YYYY-MM-DD"
+              onChange={(value) => updateText("previousSprintStart", value ?? "")}
             />
-            <TextField
+            <DateInput
               label="Previous end"
-              type="date"
               value={form.previousSprintEnd}
-              onChange={(value) => updateText("previousSprintEnd", value)}
+              valueFormat="YYYY-MM-DD"
+              onChange={(value) => updateText("previousSprintEnd", value ?? "")}
             />
-            <TextField
+            <DateInput
               label="Current start"
-              type="date"
               value={form.currentSprintStart}
-              onChange={(value) => updateText("currentSprintStart", value)}
+              valueFormat="YYYY-MM-DD"
+              onChange={(value) => updateText("currentSprintStart", value ?? "")}
             />
-            <TextField
+            <DateInput
               label="Current end"
-              type="date"
               value={form.currentSprintEnd}
-              onChange={(value) => updateText("currentSprintEnd", value)}
+              valueFormat="YYYY-MM-DD"
+              onChange={(value) => updateText("currentSprintEnd", value ?? "")}
             />
-            <NumberField
-              label="Days excl. holidays"
+            <NumberInput
+              label="Days excluding holidays"
+              min={0}
               value={form.daysInSprintExcludingHolidays}
-              onChange={(value) => updateNumber("daysInSprintExcludingHolidays", value)}
+              onChange={(value) => updateNumber("daysInSprintExcludingHolidays", numberInputValue(value))}
             />
-            <NumberField
+            <NumberInput
               label="Holiday count"
+              min={0}
               value={form.holidayCount}
-              onChange={(value) => updateNumber("holidayCount", value)}
+              onChange={(value) => updateNumber("holidayCount", numberInputValue(value))}
             />
-            <NumberField
+            <NumberInput
               label="Team members"
+              min={1}
               value={form.teamMemberCount}
-              onChange={(value) => updateNumber("teamMemberCount", value)}
+              onChange={(value) => updateNumber("teamMemberCount", numberInputValue(value))}
             />
-          </div>
-        </>
+          </SimpleGrid>
+        </Stack>
       );
     }
 
     if (activeStepId === "velocity-baseline" || activeStepId === "jira-reporting") {
       return (
-        <>
-          <SectionTitle
+        <Stack gap="lg">
+          <SectionHeading
             icon={Table2}
             title={activeStepId === "jira-reporting" ? "Closed sprint net velocity/dev" : "Net velocity/dev baseline"}
           />
-          <div className="inline-actions">
-            <button className="inline-action" type="button" onClick={importJiraVelocityHistory}>
-              <Table2 size={16} aria-hidden="true" />
+          <Group gap="xs">
+            <Button variant="light" leftSection={<Table2 size={16} />} onClick={importJiraVelocityHistory}>
               Import Jira velocity history
-            </button>
-          </div>
-          <VelocityHistoryTable
+            </Button>
+          </Group>
+          <VelocityHistoryEditor
             rows={velocityHistory}
             teamMemberCount={form.teamMemberCount}
             onChange={updateVelocityHistory}
           />
-        </>
+        </Stack>
       );
     }
 
     if (activeStepId === "slack-leaves") {
       return (
-        <>
-          <SectionTitle icon={MessageSquare} title="Slack leave confirmations" />
-          <div className="inline-actions">
-            <button className="inline-action" type="button" onClick={importSlackLeaveConfirmations}>
-              <MessageSquare size={16} aria-hidden="true" />
+        <Stack gap="lg">
+          <SectionHeading icon={MessageSquare} title="Slack leave confirmations" />
+          <Group gap="xs">
+            <Button variant="light" leftSection={<MessageSquare size={16} />} onClick={importSlackLeaveConfirmations}>
               Import Slack leave confirmations
-            </button>
-          </div>
-          <LeaveConfirmationsTable rows={leaveConfirmations} onChange={updateLeaveConfirmation} />
-          <div className="workflow-note">
-            <strong>Leave totals</strong>
-            <p>
-              Previous sprint: {form.previousSprintLeaveDays} days · Upcoming sprint: {form.upcomingSprintLeaveDays} days
-            </p>
-          </div>
-        </>
+            </Button>
+          </Group>
+          <LeaveConfirmationEditor rows={leaveConfirmations} onChange={updateLeaveConfirmation} />
+          <Alert color="blue" variant="light" title="Leave totals">
+            Previous sprint: {form.previousSprintLeaveDays} days. Upcoming sprint: {form.upcomingSprintLeaveDays} days.
+          </Alert>
+        </Stack>
       );
     }
 
     if (activeStepId === "jira-close") {
       return (
-        <>
-          <SectionTitle icon={ClipboardCheck} title="Close previous Jira sprint" />
-          <div className="workflow-note">
-            <strong>{form.previousSprintName}</strong>
-            <p>Close this sprint on {form.jiraBoardName}. This connector records the action in this saved session.</p>
-          </div>
-          <div className="preview-list">
-            <p>{apiOutput?.jiraCloseReportPreview.closeSprintAction ?? `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}</p>
-            <p>Connector action requires a saved session with no unsaved changes.</p>
-          </div>
-        </>
+        <Stack gap="lg">
+          <SectionHeading icon={ClipboardCheck} title="Close previous Jira sprint" />
+          <Alert color="teal" variant="light" title={form.previousSprintName}>
+            Close this sprint on {form.jiraBoardName}. This connector records the action in this saved session.
+          </Alert>
+          <Paper withBorder radius="md" p="md">
+            <Text size="sm">
+              {apiOutput?.jiraCloseReportPreview.closeSprintAction ??
+                `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}
+            </Text>
+            <Text size="sm" c="dimmed" mt={6}>
+              Connector action requires a saved session with no unsaved changes.
+            </Text>
+          </Paper>
+        </Stack>
       );
     }
 
     if (activeStepId === "velocity-decision") {
       return (
-        <>
-          <SectionTitle icon={Goal} title="Net velocity/dev decision" />
-          <div className="metric-grid">
-            <Metric label="Average net velocity/dev" value={planning.averageNetVelocityPerDeveloper} />
-            <Metric label="Capacity-adjusted net velocity/dev" value={planning.capacityAdjustedVelocityPerDeveloper} />
-            <Metric
-              label="Confidence-adjusted net velocity/dev"
-              value={planning.confidenceAdjustedVelocityPerDeveloper}
-            />
-            <Metric label="Total sprint net velocity" value={planning.sprintVelocity} />
-          </div>
-          <div className="field-grid velocity-controls">
-            <NumberField
+        <Stack gap="lg">
+          <SectionHeading icon={Goal} title="Net velocity/dev decision" />
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <MetricBlock label="Average net velocity/dev" value={planning.averageNetVelocityPerDeveloper} />
+            <MetricBlock label="Capacity-adjusted net velocity/dev" value={planning.capacityAdjustedVelocityPerDeveloper} />
+            <MetricBlock label="Confidence-adjusted net velocity/dev" value={planning.confidenceAdjustedVelocityPerDeveloper} />
+            <MetricBlock label="Total sprint net velocity" value={planning.sprintVelocity} />
+          </SimpleGrid>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <NumberInput
               label="Confidence adjustment %"
               value={form.confidenceAdjustment}
-              onChange={(value) => updateNumber("confidenceAdjustment", value)}
+              onChange={(value) => updateNumber("confidenceAdjustment", numberInputValue(value))}
             />
-            <TextField
-              inputMode="decimal"
+            <NumberInput
               label="Avg net velocity per developer override"
               placeholder="Optional per-dev net target"
+              min={0}
+              step={0.5}
               value={form.manualVelocityPerDeveloperOverride}
-              onChange={(value) => updateText("manualVelocityPerDeveloperOverride", value)}
+              onChange={(value) => updateText("manualVelocityPerDeveloperOverride", numberInputValue(value))}
             />
-            <TextField
+            <Textarea
               label="Override reason"
               placeholder="Confidence, low-effort spillover, or team call"
               value={form.velocityOverrideReason}
-              onChange={(value) => updateText("velocityOverrideReason", value)}
+              onChange={(event) => updateText("velocityOverrideReason", event.currentTarget.value)}
+              autosize
+              minRows={2}
             />
-          </div>
+          </SimpleGrid>
           {planning.manualVelocityOverrideTotal == null ? null : (
-            <div className="workflow-note derived-velocity-note">
-              <strong>Total sprint net velocity derived from net velocity/dev override</strong>
-              <p>
-                {planning.manualVelocityPerDeveloperOverride} SP per developer × {form.teamMemberCount} developers ={" "}
-                {planning.manualVelocityOverrideTotal} SP total sprint net velocity.
-              </p>
-            </div>
+            <Alert color="teal" variant="light" title="Total sprint net velocity derived from net velocity/dev override">
+              {planning.manualVelocityPerDeveloperOverride} SP per developer x {form.teamMemberCount} developers ={" "}
+              {planning.manualVelocityOverrideTotal} SP total sprint net velocity.
+            </Alert>
           )}
-        </>
+        </Stack>
       );
     }
 
     return (
-      <>
-        <SectionTitle icon={ListChecks} title="Finalize sprint plan" />
-        <label className="status-select final-status-select">
-          <span>Planning status</span>
-          <select
-            value={planningStatus}
-            onChange={(event) => {
-              setPlanningStatus(event.target.value as PlanningStatus);
+      <Stack gap="lg">
+        <SectionHeading icon={ListChecks} title="Finalize sprint plan" />
+        <Select
+          label="Planning status"
+          data={planningStatusOptions}
+          value={planningStatus}
+          onChange={(value) => {
+            if (value) {
+              setPlanningStatus(value as PlanningStatus);
               markDirty();
-            }}
-          >
-            <option value="draft">Draft</option>
-            <option value="ready_for_review">Ready for review</option>
-            <option value="finalized">Finalized</option>
-            <option value="published">Published</option>
-          </select>
-        </label>
-        <div className="final-review-grid">
-          <article>
-            <h3>Slack leave request</h3>
-            <pre className="preview-box">{slackPreview}</pre>
-          </article>
-          <article>
-            <h3>Jira close and report</h3>
-            <div className="preview-list">
-              <p>{apiOutput?.jiraCloseReportPreview.closeSprintAction ?? `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}</p>
-              <p>{apiOutput?.jiraCloseReportPreview.reportingAction ?? `Fetch net velocity/dev for ${form.previousSprintName} in ${form.jiraProjectKey}`}</p>
-              <p>
+            }
+          }}
+          w={{ base: "100%", sm: 260 }}
+        />
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+          <Paper withBorder radius="md" p="md">
+            <Title order={3} size="h4">
+              Slack leave request
+            </Title>
+            <Text component="pre" className="preview-block" mt="md">
+              {slackPreview}
+            </Text>
+          </Paper>
+          <Paper withBorder radius="md" p="md">
+            <Title order={3} size="h4">
+              Jira close and report
+            </Title>
+            <Stack gap="xs" mt="md">
+              <Text size="sm">
+                {apiOutput?.jiraCloseReportPreview.closeSprintAction ??
+                  `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}
+              </Text>
+              <Text size="sm">
+                {apiOutput?.jiraCloseReportPreview.reportingAction ??
+                  `Fetch net velocity/dev for ${form.previousSprintName} in ${form.jiraProjectKey}`}
+              </Text>
+              <Text size="sm">
                 Last net velocity/dev:{" "}
-                {toPerDeveloperVelocity(apiOutput?.jiraCloseReportPreview.lastNetVelocity ?? form.lastNetVelocity, form.teamMemberCount)}{" "}
+                {toPerDeveloperVelocity(
+                  apiOutput?.jiraCloseReportPreview.lastNetVelocity ?? form.lastNetVelocity,
+                  form.teamMemberCount
+                )}{" "}
                 ({apiOutput?.jiraCloseReportPreview.lastNetVelocity ?? form.lastNetVelocity} total)
-              </p>
-            </div>
-          </article>
-        </div>
-      </>
+              </Text>
+            </Stack>
+          </Paper>
+        </SimpleGrid>
+      </Stack>
     );
   }
 
-  const summaryVelocity = isDirty ? planning.sprintVelocity : apiPlan?.output.sprintVelocity ?? planning.sprintVelocity;
-  const summaryVelocityPerDeveloper = isDirty
-    ? planning.sprintNetVelocityPerDeveloper
-    : apiPlan?.output.sprintNetVelocityPerDeveloper ?? toPerDeveloperVelocity(summaryVelocity, form.teamMemberCount);
-  const sessionLabel = sessionId == null ? "New planning session" : `${form.currentSprintName} saved draft`;
-  const lastSavedLabel = lastSavedAt === "" ? "Not saved yet" : `Last saved ${new Date(lastSavedAt).toLocaleString()}`;
-  const cloneDisabled = isDirty || isConnectorRunning;
-  const connectorActionsDisabled = sessionId == null || isDirty || isConnectorRunning;
-  const connectorMode = scrumMasterStatus?.sprintPlanningConnectorMode ?? "mock";
-  const activeStepIndex = workflowStepDefinitions.findIndex((step) => step.id === activeStepId);
-  const previousStep = workflowStepDefinitions[activeStepIndex - 1];
-
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">
-            <Bot size={22} strokeWidth={2.2} />
-          </span>
-          <div>
-            <strong>AI CoWorkers</strong>
-            <span>Scrum Master workspace</span>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <span>{form.teamKey}</span>
-          <span>{form.jiraProjectKey}</span>
-          <span>{form.slackChannel}</span>
-          <span className="environment-badge">Env: {connectorMode}</span>
-        </div>
-      </header>
+    <AppShell header={{ height: 68 }} padding={0}>
+      <AppShell.Header withBorder>
+        <Container size="xl" h="100%">
+          <Group h="100%" justify="space-between" gap="md" wrap="nowrap">
+            <Group gap="sm" wrap="nowrap">
+              <Box className="brand-mark">
+                <Bot size={22} aria-hidden="true" />
+              </Box>
+              <Box>
+                <Text fw={800} lh={1.15}>
+                  AI CoWorkers / Scrum Master
+                </Text>
+                <Text size="xs" c="dimmed" visibleFrom="sm">
+                  Jira-first sprint planning
+                </Text>
+              </Box>
+            </Group>
+            <Group gap="xs" justify="flex-end" wrap="nowrap">
+              <Badge variant="light" color="gray" visibleFrom="sm">
+                {form.teamKey}
+              </Badge>
+              <Badge variant="light" color="gray" visibleFrom="sm">
+                {form.jiraProjectKey}
+              </Badge>
+              <Badge color="dark" variant="filled" tt="uppercase">
+                Env: {connectorMode}
+              </Badge>
+            </Group>
+          </Group>
+        </Container>
+      </AppShell.Header>
 
-      <section className="hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Coworker 01</p>
-          <h1>Sprint planning without the Excel handoff.</h1>
-          <p>
-            This workbench turns the current SM flow into a Jira-first workflow: clone sprint context, collect
-            leaves, close the previous sprint, pull net velocity/dev, and calculate team-approved net velocity per developer.
-          </p>
-        </div>
-        <aside className="velocity-panel" aria-label="Sprint net velocity per developer output">
-          <span className="panel-kicker">Net velocity/dev</span>
-          <strong>{summaryVelocityPerDeveloper}</strong>
-          <p>
-            {planning.velocitySource} for {form.currentSprintName} · {summaryVelocity} total net velocity
-          </p>
-          <button type="button" onClick={generateDraft}>
-            <Sparkles size={18} />
-            Generate SM workflow
-          </button>
-          <small aria-live="polite">{draftStatus}</small>
-        </aside>
-      </section>
+      <AppShell.Main className="planner-app">
+        {viewMode === "home" ? (
+          <Container size="xl" py="xl">
+            <Stack gap="lg">
+              <Group justify="space-between" align="flex-start" gap="md">
+                <Box>
+                  <Title order={1} size="h2">
+                    Sprint plans
+                  </Title>
+                  <Text c="dimmed" mt={4}>
+                    Resume, review, or clone sprint planning sessions.
+                  </Text>
+                </Box>
+                <Button leftSection={<Plus size={16} />} onClick={startNewPlanningSession}>
+                  New sprint plan
+                </Button>
+              </Group>
 
-      {viewMode === "home" ? (
-        <section className="sprint-home" aria-labelledby="sprint-home-title">
-          <div className="sprint-home-header">
-            <div>
-              <span className="panel-kicker">Sprint planner coworker</span>
-              <h2 id="sprint-home-title">Sprint plans</h2>
-              <p>Resume an in-progress sprint plan, review finalized plans, or start the next planning workflow.</p>
-            </div>
-            <div className="sprint-home-actions">
-              <button type="button" onClick={() => refreshSavedSessions("Refreshing sprint planning sessions...")}>
-                <History size={16} aria-hidden="true" />
-                Refresh
-              </button>
-              <button className="primary-home-action" type="button" onClick={startNewPlanningSession}>
-                <Plus size={16} aria-hidden="true" />
-                Start sprint plan
-              </button>
-            </div>
-          </div>
+              <Paper withBorder radius="md" p="md">
+                <Group gap="sm" align="end">
+                  <TextInput
+                    label="Search sprint"
+                    placeholder="Q2S7 - 2026"
+                    leftSection={<Search size={16} />}
+                    value={sessionSearch}
+                    onChange={(event) => setSessionSearch(event.currentTarget.value)}
+                    className="session-search"
+                  />
+                  <Select
+                    label="Status"
+                    data={[{ value: "all", label: "All" }, ...planningStatusOptions]}
+                    value={sessionStatusFilter}
+                    onChange={(value) => setSessionStatusFilter((value as PlanningStatus | "all") ?? "all")}
+                    w={{ base: "100%", sm: 190 }}
+                  />
+                  <Button
+                    variant="default"
+                    leftSection={<History size={16} />}
+                    onClick={() => refreshSavedSessions("Refreshing sprint planning sessions...")}
+                  >
+                    Refresh
+                  </Button>
+                </Group>
+              </Paper>
 
-          <div className="sprint-home-grid">
-            <article className="sprint-home-summary">
-              <SectionTitle icon={Settings2} title="Team setup" />
-              <dl>
-                <div>
-                  <dt>Team</dt>
-                  <dd>{form.teamName}</dd>
-                </div>
-                <div>
-                  <dt>Project</dt>
-                  <dd>{form.jiraProjectName || form.jiraProjectKey}</dd>
-                </div>
-                <div>
-                  <dt>Pattern</dt>
-                  <dd>{form.sprintNamingPattern}</dd>
-                </div>
-                <div>
-                  <dt>Connectors</dt>
-                  <dd>Jira + Slack</dd>
-                </div>
-              </dl>
-            </article>
-
-            <div className="sprint-home-list" aria-label="Saved sprint plans">
-              {savedSessions.length === 0 ? (
-                <div className="empty-sprint-list">
-                  <FolderOpen size={34} aria-hidden="true" />
-                  <strong>No sprint plans saved yet</strong>
-                  <p>Start a sprint plan and save it once to make it available here for resume and review.</p>
-                  <button type="button" onClick={startNewPlanningSession}>
-                    <Plus size={16} aria-hidden="true" />
-                    Start sprint plan
-                  </button>
-                </div>
-              ) : (
-                savedSessions.map((session) => (
-                  <article className="sprint-plan-card" key={session.sessionId}>
-                    <div className="sprint-plan-main">
-                      <span className={`planning-status-pill ${session.planningStatus}`}>
-                        {session.planningStatus.replaceAll("_", " ")}
-                      </span>
-                      <h3>{session.currentSprintName}</h3>
-                      <p>
-                        {session.currentSprintDates.start} to {session.currentSprintDates.end} · cloned from{" "}
-                        {session.previousSprintName}
-                      </p>
-                    </div>
-                    <div className="sprint-plan-metrics">
-                      <span>
-                        <strong>{session.sprintVelocityPerDeveloper}</strong>
-                        net velocity/dev
-                      </span>
-                      <span>
-                        <strong>{session.sprintVelocity}</strong>
-                        total net velocity
-                      </span>
-                      <span>
-                        <strong>{session.pendingLeaveConfirmations}</strong>
-                        pending leaves
-                      </span>
-                    </div>
-                    <div className="sprint-plan-footer">
-                      <small>Updated {formatSavedAt(session.updatedAt)}</small>
-                      <div>
-                        <button type="button" onClick={() => loadSession(session.sessionId)}>
-                          <FolderOpen size={16} aria-hidden="true" />
-                          {session.planningStatus === "published" || session.planningStatus === "finalized"
-                            ? "Review"
-                            : "Continue"}
-                        </button>
-                        <button type="button" onClick={() => cloneSavedSession(session.sessionId)}>
-                          <Copy size={16} aria-hidden="true" />
-                          Clone next
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
-          </div>
-        </section>
-      ) : (
-        <>
-      <section className="session-strip" aria-label="Saved sprint planning session">
-        <div>
-          <span className="panel-kicker">Session</span>
-          <strong>{sessionLabel}</strong>
-          <small>
-            {planningStatus.replaceAll("_", " ")} · {isDirty ? "Unsaved changes" : lastSavedLabel}
-          </small>
-        </div>
-        <label className="status-select">
-          <span>Planning status</span>
-          <select
-            value={planningStatus}
-            onChange={(event) => {
-              setPlanningStatus(event.target.value as PlanningStatus);
-              markDirty();
-            }}
-          >
-            <option value="draft">Draft</option>
-            <option value="ready_for_review">Ready for review</option>
-            <option value="finalized">Finalized</option>
-            <option value="published">Published</option>
-          </select>
-        </label>
-        <div className="session-actions">
-          <button
-            type="button"
-            onClick={() => {
-              void refreshSavedSessions("Refreshing sprint planning sessions...");
-              setViewMode("home");
-            }}
-            disabled={isConnectorRunning}
-          >
-            <History size={16} />
-            Sprint list
-          </button>
-          <button className="primary-session-action" type="button" onClick={saveSession} disabled={isConnectorRunning}>
-            <SaveIcon size={16} />
-            Save
-          </button>
-          <button type="button" onClick={openSessionBrowser} disabled={isConnectorRunning}>
-            <FolderOpen size={16} />
-            Open
-          </button>
-        </div>
-        <div className="session-connector-actions">
-          <div>
-            <span className="panel-kicker">Connector actions</span>
-            <small>
-              {sessionId == null
-                ? "Save this planning session before running connectors."
-                : isDirty
-                  ? "Save changes to run connectors against the latest saved session."
-                  : "Run connector actions now; Jira and Slack API/MCP adapters can replace these later."}
-            </small>
-          </div>
-          <div className="connector-action-buttons">
-            <button
-              type="button"
-              disabled={connectorActionsDisabled}
-              onClick={() => runSavedConnectorAction("close-previous-sprint")}
-            >
-              <ClipboardCheck size={16} />
-              Close Jira sprint
-            </button>
-            <button
-              type="button"
-              disabled={connectorActionsDisabled}
-              onClick={() => runSavedConnectorAction("fetch-closed-story-points")}
-            >
-              <Table2 size={16} />
-              Jira net velocity/dev
-            </button>
-            <button
-              type="button"
-              disabled={connectorActionsDisabled}
-              onClick={() => runSavedConnectorAction("collect-leaves")}
-            >
-              <MessageSquare size={16} />
-              Slack leaves
-            </button>
-            <button type="button" disabled={connectorActionsDisabled} onClick={runSavedConnectorWorkflow}>
-              <Sparkles size={16} />
-              Run planning connectors
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {isSessionBrowserOpen ? (
-        <section className="session-browser" aria-labelledby="session-browser-title">
-          <div className="session-browser-header">
-            <div>
-              <span className="panel-kicker">Saved sessions</span>
-              <h2 id="session-browser-title">Open or clone sprint planning session</h2>
-            </div>
-            <button type="button" onClick={() => setIsSessionBrowserOpen(false)}>
-              Close
-            </button>
-          </div>
-          <div className="session-list">
-            {savedSessions.length === 0 ? (
-              <p>No saved sprint planning sessions for {form.teamKey} yet.</p>
-            ) : (
-              savedSessions.map((session) => (
-                <article className="session-list-row" key={session.sessionId}>
-                  <span>
-                    <strong>{session.currentSprintName}</strong>
-                    <small>
-                      {session.currentSprintDates.start} to {session.currentSprintDates.end} · from{" "}
-                      {session.previousSprintName}
-                    </small>
-                  </span>
-                  <span className="session-meta">
-                    <small>{session.planningStatus.replaceAll("_", " ")}</small>
-                    <strong>
-                      {session.sprintVelocityPerDeveloper} net velocity/dev · {session.sprintVelocity} total
-                    </strong>
-                    <small>
-                      {session.pendingLeaveConfirmations} pending leaves · {session.connectorPendingSteps} connector
-                      steps
-                    </small>
-                  </span>
-                  <span className="session-row-actions">
-                    <button type="button" onClick={() => loadSession(session.sessionId)}>
-                      <FolderOpen size={16} />
+              <Grid gap="lg">
+                <Grid.Col span={{ base: 12, md: 4 }}>
+                  <Paper withBorder radius="md" p="lg">
+                    <SectionHeading icon={Settings2} title="Team setup" />
+                    <Stack gap="sm" mt="lg">
+                      <InfoRow label="Team" value={form.teamName} />
+                      <InfoRow label="Project" value={form.jiraProjectName || form.jiraProjectKey} />
+                      <InfoRow label="Pattern" value={form.sprintNamingPattern} />
+                      <InfoRow label="Connectors" value="Jira + Slack preview" />
+                    </Stack>
+                  </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 8 }}>
+                  <Stack gap="md">
+                    {savedSessions.length === 0 ? (
+                      <Paper withBorder radius="md" p="xl" ta="center">
+                        <FolderOpen size={34} aria-hidden="true" />
+                        <Title order={2} size="h3" mt="sm">
+                          No sprint plans saved yet
+                        </Title>
+                        <Text c="dimmed" mt={4}>
+                          Start a sprint plan and save it once to make it available here for resume and review.
+                        </Text>
+                        <Button mt="lg" leftSection={<Plus size={16} />} onClick={startNewPlanningSession}>
+                          Start sprint plan
+                        </Button>
+                      </Paper>
+                    ) : visibleSavedSessions.length === 0 ? (
+                      <Paper withBorder radius="md" p="xl" ta="center">
+                        <Title order={2} size="h3">
+                          No matching sprint plans
+                        </Title>
+                        <Text c="dimmed" mt={4}>
+                          Clear the search or status filter to see saved sessions.
+                        </Text>
+                      </Paper>
+                    ) : (
+                      visibleSavedSessions.map((session) => (
+                        <SprintPlanCard
+                          key={session.sessionId}
+                          session={session}
+                          onOpen={() => loadSession(session.sessionId)}
+                          onClone={() => cloneSavedSession(session.sessionId)}
+                        />
+                      ))
+                    )}
+                  </Stack>
+                </Grid.Col>
+              </Grid>
+            </Stack>
+          </Container>
+        ) : (
+          <Container size="xl" py="lg">
+            <Stack gap="lg">
+              <Paper withBorder radius="md" p="md">
+                <Group justify="space-between" align="flex-start" gap="md">
+                  <Box>
+                    <Group gap="xs" mb={4}>
+                      <PlanningStatusBadge status={planningStatus} />
+                      <Text size="sm" c={isDirty ? "orange" : "dimmed"}>
+                        {isDirty ? "unsaved changes" : lastSavedLabel}
+                      </Text>
+                    </Group>
+                    <Title order={1} size="h2">
+                      {form.currentSprintName}
+                    </Title>
+                    <Text c="dimmed">{sessionLabel}</Text>
+                  </Box>
+                  <Group gap="xs">
+                    <Button
+                      variant="default"
+                      leftSection={<History size={16} />}
+                      disabled={isConnectorRunning}
+                      onClick={() => {
+                        void refreshSavedSessions("Refreshing sprint planning sessions...");
+                        setViewMode("home");
+                      }}
+                    >
+                      Sprint list
+                    </Button>
+                    <Button leftSection={<SaveIcon size={16} />} onClick={saveSession} disabled={isConnectorRunning}>
+                      Save
+                    </Button>
+                    <Button
+                      variant="light"
+                      leftSection={<FolderOpen size={16} />}
+                      onClick={openSessionBrowser}
+                      disabled={isConnectorRunning}
+                    >
                       Open
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                  </Group>
+                </Group>
+              </Paper>
+
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+                <MetricBlock
+                  label="Net velocity/dev"
+                  value={summaryVelocityPerDeveloper}
+                  caption={`${summaryVelocity} total`}
+                  dominant
+                />
+                <MetricBlock label="Average/dev" value={planning.averageNetVelocityPerDeveloper} />
+                <MetricBlock label="Capacity/dev" value={planning.capacityAdjustedVelocityPerDeveloper} />
+                <MetricBlock label="Leaves" value={form.previousSprintLeaveDays + form.upcomingSprintLeaveDays} />
+              </SimpleGrid>
+
+              <Paper withBorder radius="md" p="md">
+                <Group justify="space-between" align="flex-start" gap="md">
+                  <Box>
+                    <Text fw={750}>Connector actions</Text>
+                    <Text size="sm" c="dimmed">
+                      {sessionId == null
+                        ? "Save this planning session before running connectors."
+                        : isDirty
+                          ? "Save changes to run connectors against the latest saved session."
+                          : "Run connector actions against this saved session."}
+                    </Text>
+                  </Box>
+                  <Group gap="xs">
+                    <Button
+                      variant="default"
+                      leftSection={<MessageSquare size={16} />}
+                      disabled={connectorActionsDisabled}
+                      onClick={() => runSavedConnectorAction("collect-leaves")}
+                    >
+                      Slack leaves
+                    </Button>
+                    <Button
+                      variant="default"
+                      leftSection={<ClipboardCheck size={16} />}
+                      disabled={connectorActionsDisabled}
+                      onClick={() => runSavedConnectorAction("close-previous-sprint")}
+                    >
+                      Close Jira sprint
+                    </Button>
+                    <Button
+                      variant="default"
+                      leftSection={<Table2 size={16} />}
+                      disabled={connectorActionsDisabled}
+                      onClick={() => runSavedConnectorAction("fetch-closed-story-points")}
+                    >
+                      Jira net velocity/dev
+                    </Button>
+                    <Button
+                      variant="light"
+                      leftSection={<Sparkles size={16} />}
+                      disabled={connectorActionsDisabled}
+                      onClick={runSavedConnectorWorkflow}
+                    >
+                      Run planning connectors
+                    </Button>
+                  </Group>
+                </Group>
+              </Paper>
+
+              <Grid gap="lg" align="flex-start">
+                <Grid.Col span={{ base: 12, md: 3 }}>
+                  <Paper withBorder radius="md" p="md" className="stepper-panel">
+                    <WorkflowStepper
+                      steps={workflowStepDefinitions}
+                      activeStepId={activeStepId}
+                      getState={getWorkflowStepState}
+                      onStepClick={navigateWorkflowStep}
+                      mobile={mobileStepper}
+                    />
+                  </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 6 }}>
+                  <Paper withBorder radius="md" p={{ base: "md", sm: "lg" }}>
+                    <Stack gap="lg">
+                      <Group justify="space-between" align="flex-start" gap="md">
+                        <Box>
+                          <Text size="xs" c="dimmed" fw={800} tt="uppercase">
+                            Step {activeStepIndex + 1}
+                          </Text>
+                          <Title order={2} size="h3">
+                            {activeStep.title}
+                          </Title>
+                          <Text c="dimmed" size="sm" mt={4}>
+                            {activeStep.description}
+                          </Text>
+                        </Box>
+                        {activeStep.connector ? (
+                          <Badge variant="light" color={activeStep.connector === "jira" ? "blue" : "teal"}>
+                            {activeStep.connector} connector
+                          </Badge>
+                        ) : null}
+                      </Group>
+
+                      {renderStepContent()}
+
+                      <Group justify="space-between" gap="sm">
+                        <Button
+                          variant="default"
+                          disabled={!previousStep}
+                          onClick={() => previousStep && setActiveStepId(previousStep.id)}
+                        >
+                          Back
+                        </Button>
+                        <Group gap="xs">
+                          {activeStepId !== "finalize" ? (
+                            <Button variant="default" onClick={() => skipStep(activeStepId)}>
+                              Skip
+                            </Button>
+                          ) : null}
+                          <Button
+                            disabled={
+                              isConnectorRunning ||
+                              (activeStepId === "jira-close" && connectorActionsDisabled) ||
+                              (activeStepId === "jira-reporting" && connectorActionsDisabled)
+                            }
+                            onClick={runActiveStepPrimaryAction}
+                          >
+                            {activeStep.primaryAction}
+                          </Button>
+                        </Group>
+                      </Group>
+
+                      <Text size="sm" c="dimmed" aria-live="polite">
+                        {draftStatus}
+                      </Text>
+                    </Stack>
+                  </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 3 }}>
+                  <WorkflowSummary
+                    summaryVelocityPerDeveloper={summaryVelocityPerDeveloper}
+                    summaryVelocity={summaryVelocity}
+                    planning={planning}
+                    workflowChecklist={workflowChecklist}
+                    slackPreview={slackPreview}
+                  />
+                </Grid.Col>
+              </Grid>
+            </Stack>
+          </Container>
+        )}
+      </AppShell.Main>
+
+      <Modal
+        opened={isSessionBrowserOpen}
+        onClose={() => setIsSessionBrowserOpen(false)}
+        title="Open or clone sprint planning session"
+        size="xl"
+      >
+        <Stack gap="md">
+          {savedSessions.length === 0 ? (
+            <Text c="dimmed">No saved sprint planning sessions for {form.teamKey} yet.</Text>
+          ) : (
+            savedSessions.map((session) => (
+              <Paper withBorder radius="md" p="md" key={session.sessionId}>
+                <Group justify="space-between" align="flex-start" gap="md">
+                  <Box>
+                    <Group gap="xs" mb={4}>
+                      <PlanningStatusBadge status={session.planningStatus} />
+                      <Text size="sm" c="dimmed">
+                        {session.currentSprintDates.start} to {session.currentSprintDates.end}
+                      </Text>
+                    </Group>
+                    <Title order={3} size="h4">
+                      {session.currentSprintName}
+                    </Title>
+                    <Text size="sm" c="dimmed">
+                      From {session.previousSprintName} - {formatSavedAt(session.updatedAt)}
+                    </Text>
+                    <Group gap="xs" mt="xs">
+                      <Badge variant="light">{session.sprintVelocityPerDeveloper} net velocity/dev</Badge>
+                      <Badge variant="light" color="gray">
+                        {session.sprintVelocity} total
+                      </Badge>
+                      <Badge variant="light" color="yellow">
+                        {session.pendingLeaveConfirmations} pending leaves
+                      </Badge>
+                    </Group>
+                  </Box>
+                  <Group gap="xs">
+                    <Button variant="default" leftSection={<FolderOpen size={16} />} onClick={() => loadSession(session.sessionId)}>
+                      Open
+                    </Button>
+                    <Button
+                      variant="light"
+                      leftSection={<Copy size={16} />}
                       onClick={() => cloneSavedSession(session.sessionId)}
                       disabled={cloneDisabled}
                     >
-                      <Copy size={16} />
                       Clone to new sprint
-                    </button>
-                  </span>
-                </article>
-              ))
-            )}
-          </div>
-        </section>
-      ) : null}
-
-      <Tabs.Root className="workflow-grid" value={activeStepId} onValueChange={(value) => navigateWorkflowStep(value as WorkflowStepId)}>
-        <Tabs.List className="workflow-stepper" aria-label="Sprint planning workflow">
-          {workflowStepDefinitions.map((step, index) => {
-            const state = getWorkflowStepState(step.id);
-            const isLocked = state === "locked";
-
-            return (
-              <Tabs.Trigger className={`workflow-step ${state}`} disabled={isLocked} key={step.id} value={step.id}>
-                <span className="workflow-step-index">{index + 1}</span>
-                <span>
-                  <strong>{step.title}</strong>
-                  <small>
-                    {state === "completed"
-                      ? "Completed"
-                      : state === "current"
-                        ? "In progress"
-                        : state === "available"
-                          ? "Available"
-                          : "Locked"}
-                  </small>
-                </span>
-              </Tabs.Trigger>
-            );
-          })}
-        </Tabs.List>
-
-        <Tabs.Content className="workflow-editor" value={activeStepId} asChild>
-          <form>
-            <div className="workflow-editor-header">
-              <div>
-                <span className="panel-kicker">Step {activeStepIndex + 1}</span>
-                <h2>{activeStep.title}</h2>
-                <p>{activeStep.description}</p>
-              </div>
-              {activeStep.connector ? (
-                <span className={`connector-mode-badge ${activeStep.connector}`}>{activeStep.connector} connector</span>
-              ) : null}
-            </div>
-
-            {renderStepContent()}
-
-            <div className="workflow-actions">
-              <button
-                className="secondary-action"
-                disabled={!previousStep}
-                onClick={() => previousStep && setActiveStepId(previousStep.id)}
-                type="button"
-              >
-                Back
-              </button>
-              {activeStepId !== "finalize" ? (
-                <button className="secondary-action" onClick={() => skipStep(activeStepId)} type="button">
-                  Skip for now
-                </button>
-              ) : null}
-              <button
-                className="primary-action"
-                disabled={
-                  isConnectorRunning ||
-                  (activeStepId === "jira-close" && connectorActionsDisabled) ||
-                  (activeStepId === "jira-reporting" && connectorActionsDisabled)
-                }
-                onClick={runActiveStepPrimaryAction}
-                type="button"
-              >
-                {activeStep.primaryAction}
-              </button>
-            </div>
-          </form>
-        </Tabs.Content>
-
-        <aside className="workflow-summary">
-          <article className="output-card velocity-summary-card">
-            <SectionTitle icon={Goal} title="Net velocity per developer" />
-            <div className="final-metric">
-              <span>Final net velocity/dev</span>
-              <strong>{summaryVelocityPerDeveloper}</strong>
-            </div>
-            <Metric label="Total sprint net velocity" value={summaryVelocity} />
-            <Metric label="Average net velocity/dev" value={planning.averageNetVelocityPerDeveloper} />
-            <Metric label="Available capacity days" value={planning.availableCapacityDays} />
-            <Metric label="Capacity-adjusted net velocity/dev" value={planning.capacityAdjustedVelocityPerDeveloper} />
-          </article>
-
-          <article className="output-card">
-            <SectionTitle icon={ClipboardCheck} title="Connector status" />
-            <div className="connector-status-grid">
-              <span>Jira</span>
-              <strong>Session preview</strong>
-              <span>Slack</span>
-              <strong>Leave preview</strong>
-            </div>
-            <p className="connector-status-note">
-              Connector actions update this saved session. The active environment is shown in the top bar.
-            </p>
-          </article>
-
-          <article className="output-card">
-            <SectionTitle icon={ListChecks} title="Workflow status" />
-            <div className="step-list">
-              {workflowChecklist.map((step) => (
-                <div className="step-row" key={step.id}>
-                  <span className={`step-status ${step.status}`}>
-                    <CheckCircle2 size={16} aria-hidden="true" />
-                  </span>
-                  <div>
-                    <p>{step.label}</p>
-                    <small>
-                      {"owner" in step ? `${step.owner} · ` : ""}
-                      {statusLabels[step.status as AutomationStep["status"]] ?? step.status}
-                    </small>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="output-card">
-            <SectionTitle icon={MessageSquare} title="Slack preview" />
-            <pre className="preview-box">{slackPreview}</pre>
-          </article>
-        </aside>
-      </Tabs.Root>
-        </>
-      )}
-    </main>
+                    </Button>
+                  </Group>
+                </Group>
+              </Paper>
+            ))
+          )}
+        </Stack>
+      </Modal>
+    </AppShell>
   );
 }
 
-function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="section-title">
-      <span>
-        <Icon size={18} aria-hidden="true" />
-      </span>
-      <h2>{title}</h2>
-    </div>
-  );
-}
-
-function VelocityHistoryTable({
-  rows,
-  teamMemberCount,
-  onChange
-}: {
-  rows: VelocityHistoryRow[];
-  teamMemberCount: number;
-  onChange: (
-    sprintOffset: VelocityHistoryRow["sprintOffset"],
-    field: keyof Pick<VelocityHistoryRow, "netVelocity">,
-    value: string
-  ) => void;
-}) {
-  return (
-    <div className="velocity-history" aria-describedby="velocity-history-help">
-      <table>
-        <caption>Velocity history used for average</caption>
-        <thead>
-          <tr>
-            <th scope="col">Sprint</th>
-            <th scope="col">Net velocity/dev</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.sprintOffset}>
-              <th scope="row">
-                <span>{row.sprintOffset === -1 ? "Last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}</span>
-                <small>
-                  {row.sprintName} · {toPerDeveloperVelocity(row.netVelocity, teamMemberCount)} net velocity/dev ·{" "}
-                  {row.netVelocity} total net velocity · {row.completedStoryPoints} completed SP · {row.leaveDays} leave days ·{" "}
-                  <SourcePill source={row.source} />
-                </small>
-              </th>
-              <td>
-                <input
-                  aria-label={`Net velocity per developer for ${row.sprintOffset === -1 ? "last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}`}
-                  min="0"
-                  onChange={(event) =>
-                    onChange(row.sprintOffset, "netVelocity", String(toNumber(event.target.value) * teamMemberCount))
-                  }
-                  step="0.5"
-                  type="number"
-                  value={toPerDeveloperVelocity(row.netVelocity, teamMemberCount)}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p id="velocity-history-help">
-        Average is calculated from the three sprint net velocity/dev values. Jira import updates the last closed sprint
-        net velocity/dev before the SM finalizes the override.
-      </p>
-    </div>
-  );
-}
-
-function LeaveConfirmationsTable({
-  rows,
-  onChange
-}: {
-  rows: LeaveConfirmationRow[];
-  onChange: (
-    slackUserId: string,
-    field: keyof Pick<LeaveConfirmationRow, "previousSprintLeaveDays" | "upcomingSprintLeaveDays">,
-    value: string
-  ) => void;
-}) {
-  return (
-    <div className="leave-confirmations" aria-describedby="leave-confirmations-help">
-      <table>
-        <caption>Slack leave confirmations</caption>
-        <thead>
-          <tr>
-            <th scope="col">Teammate</th>
-            <th scope="col">Previous sprint</th>
-            <th scope="col">Upcoming sprint</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.slackUserId}>
-              <th scope="row">
-                <span>{row.teammateName}</span>
-                <small>
-                  {row.confirmationStatus.replaceAll("_", " ")} · <SourcePill source={row.source} />
-                </small>
-              </th>
-              <td>
-                <input
-                  aria-label={`Previous sprint leave days for ${row.teammateName}`}
-                  min="0"
-                  onChange={(event) => onChange(row.slackUserId, "previousSprintLeaveDays", event.target.value)}
-                  step="0.5"
-                  type="number"
-                  value={row.previousSprintLeaveDays}
-                />
-              </td>
-              <td>
-                <input
-                  aria-label={`Upcoming sprint leave days for ${row.teammateName}`}
-                  min="0"
-                  onChange={(event) => onChange(row.slackUserId, "upcomingSprintLeaveDays", event.target.value)}
-                  step="0.5"
-                  type="number"
-                  value={row.upcomingSprintLeaveDays}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p id="leave-confirmations-help">
-        Table totals update the previous and upcoming sprint leave days used in capacity and Slack previews.
-      </p>
-    </div>
-  );
-}
-
-function SourcePill({ source }: { source: VelocityHistoryRow["source"] | LeaveConfirmationRow["source"] }) {
-  const label =
-    source === "mock-jira-report"
-      ? "Jira preview"
-      : source === "jira_report"
-        ? "Real Jira"
-        : source === "mock-slack-thread"
-          ? "Slack preview"
-          : source === "slack_thread"
-            ? "Real Slack"
-            : "Manual";
-
-  return <span className={`source-pill ${source}`}>{label}</span>;
-}
-
-function TextField({
-  label,
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-  inputMode
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-  placeholder?: string;
-  inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
-}) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <input
-        inputMode={inputMode}
-        placeholder={placeholder}
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  onChange
-}: {
-  label: string;
-  value: number;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <input min="0" step="0.5" type="number" value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
+    <Group justify="space-between" gap="md" wrap="nowrap">
+      <Text size="sm" c="dimmed">
+        {label}
+      </Text>
+      <Text size="sm" fw={700} ta="right">
+        {value}
+      </Text>
+    </Group>
   );
 }
