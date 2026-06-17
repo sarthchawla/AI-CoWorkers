@@ -97,13 +97,13 @@ const workflowSteps: AutomationStep[] = [
   },
   {
     id: "jira-close",
-    label: "Close the previous Jira sprint and read completed story points from reporting.",
+    label: "Close the previous Jira sprint and read net velocity from reporting.",
     owner: "Jira connector",
     status: "connector-pending"
   },
   {
     id: "velocity",
-    label: "Calculate average net velocity, capacity adjustment, and final team-approved sprint velocity.",
+    label: "Calculate average net velocity, capacity adjustment, and final team-approved sprint net velocity.",
     owner: "AI Scrum Master",
     status: "ready"
   }
@@ -217,7 +217,7 @@ const workflowStepDefinitions: Array<{
   },
   {
     id: "velocity-baseline",
-    title: "Review velocity baseline",
+    title: "Review net velocity baseline",
     description: "Import or edit the -3, -2, and provisional -1 velocity values used for the average.",
     primaryAction: "Confirm baseline",
     connector: "jira"
@@ -238,16 +238,16 @@ const workflowStepDefinitions: Array<{
   },
   {
     id: "jira-reporting",
-    title: "Pull Jira completed story points",
+    title: "Pull Jira net velocity",
     description: "Fetch reporting values for the closed sprint, then edit the final -1 net velocity if needed.",
-    primaryAction: "Pull story points",
+    primaryAction: "Pull net velocity",
     connector: "jira"
   },
   {
     id: "velocity-decision",
-    title: "Calculate velocity and override",
-    description: "Review the calculated velocity and apply a team-approved override when context supports it.",
-    primaryAction: "Finalize velocity"
+    title: "Calculate net velocity and override",
+    description: "Review the calculated net velocity and apply a team-approved override when context supports it.",
+    primaryAction: "Finalize net velocity"
   },
   {
     id: "finalize",
@@ -810,12 +810,12 @@ export function SprintPlanningWorkflow() {
     const runningMessages: Record<SprintPlanningConnectorActionKey, string> = {
       "collect-leaves": "Collecting saved-session Slack leave confirmations...",
       "close-previous-sprint": "Closing previous sprint in saved-session Jira preview...",
-      "fetch-closed-story-points": "Importing saved-session Jira story points..."
+      "fetch-closed-story-points": "Importing saved-session Jira net velocity..."
     };
     const successMessages: Record<SprintPlanningConnectorActionKey, string> = {
       "collect-leaves": "Slack leave confirmations updated in saved session",
       "close-previous-sprint": "Previous sprint closure recorded in saved session",
-      "fetch-closed-story-points": "Jira closed story points updated in saved session"
+      "fetch-closed-story-points": "Jira closed sprint net velocity updated in saved session"
     };
 
     setDraftStatus(runningMessages[actionKey]);
@@ -1027,7 +1027,7 @@ export function SprintPlanningWorkflow() {
         <>
           <SectionTitle
             icon={Table2}
-            title={activeStepId === "jira-reporting" ? "Completed story points" : "Velocity baseline"}
+            title={activeStepId === "jira-reporting" ? "Closed sprint net velocity" : "Net velocity baseline"}
           />
           <div className="inline-actions">
             <button className="inline-action" type="button" onClick={importJiraVelocityHistory}>
@@ -1080,11 +1080,11 @@ export function SprintPlanningWorkflow() {
     if (activeStepId === "velocity-decision") {
       return (
         <>
-          <SectionTitle icon={Goal} title="Velocity decision" />
+          <SectionTitle icon={Goal} title="Net velocity decision" />
           <div className="metric-grid">
             <Metric label="Average net velocity" value={planning.averageNetVelocity} />
-            <Metric label="Capacity-adjusted velocity" value={planning.capacityAdjustedVelocity} />
-            <Metric label="Confidence-adjusted velocity" value={planning.confidenceAdjustedVelocity} />
+            <Metric label="Capacity-adjusted net velocity" value={planning.capacityAdjustedVelocity} />
+            <Metric label="Confidence-adjusted net velocity" value={planning.confidenceAdjustedVelocity} />
           </div>
           <div className="field-grid velocity-controls">
             <NumberField
@@ -1094,8 +1094,8 @@ export function SprintPlanningWorkflow() {
             />
             <TextField
               inputMode="decimal"
-              label="Avg velocity per developer override"
-              placeholder="Optional per-dev target"
+              label="Avg net velocity per developer override"
+              placeholder="Optional per-dev net target"
               value={form.manualVelocityPerDeveloperOverride}
               onChange={(value) => updateText("manualVelocityPerDeveloperOverride", value)}
             />
@@ -1108,10 +1108,10 @@ export function SprintPlanningWorkflow() {
           </div>
           {planning.manualVelocityOverrideTotal == null ? null : (
             <div className="workflow-note derived-velocity-note">
-              <strong>Total sprint velocity derived from per-dev override</strong>
+              <strong>Total sprint net velocity derived from per-dev override</strong>
               <p>
                 {planning.manualVelocityPerDeveloperOverride} SP per developer × {form.teamMemberCount} developers ={" "}
-                {planning.manualVelocityOverrideTotal} SP total sprint velocity.
+                {planning.manualVelocityOverrideTotal} SP total sprint net velocity.
               </p>
             </div>
           )}
@@ -1146,7 +1146,7 @@ export function SprintPlanningWorkflow() {
             <h3>Jira close and report</h3>
             <div className="preview-list">
               <p>{apiOutput?.jiraCloseReportPreview.closeSprintAction ?? `Close ${form.previousSprintName} on Jira board ${form.jiraBoardName}`}</p>
-              <p>{apiOutput?.jiraCloseReportPreview.reportingAction ?? `Fetch completed story points for ${form.previousSprintName} in ${form.jiraProjectKey}`}</p>
+              <p>{apiOutput?.jiraCloseReportPreview.reportingAction ?? `Fetch net velocity for ${form.previousSprintName} in ${form.jiraProjectKey}`}</p>
               <p>Last net velocity: {apiOutput?.jiraCloseReportPreview.lastNetVelocity ?? form.lastNetVelocity}</p>
             </div>
           </article>
@@ -1189,11 +1189,11 @@ export function SprintPlanningWorkflow() {
           <h1>Sprint planning without the Excel handoff.</h1>
           <p>
             This workbench turns the current SM flow into a Jira-first workflow: clone sprint context, collect
-            leaves, close the previous sprint, pull completed story points, and calculate team-approved velocity.
+            leaves, close the previous sprint, pull net velocity, and calculate team-approved sprint net velocity.
           </p>
         </div>
-        <aside className="velocity-panel" aria-label="Sprint velocity output">
-          <span className="panel-kicker">Sprint velocity</span>
+        <aside className="velocity-panel" aria-label="Sprint net velocity output">
+          <span className="panel-kicker">Sprint net velocity</span>
           <strong>{summaryVelocity}</strong>
           <p>
             {planning.velocitySource} for {form.currentSprintName}
@@ -1276,7 +1276,7 @@ export function SprintPlanningWorkflow() {
                     <div className="sprint-plan-metrics">
                       <span>
                         <strong>{session.sprintVelocity}</strong>
-                        SP
+                        sprint net velocity
                       </span>
                       <span>
                         <strong>{session.pendingLeaveConfirmations}</strong>
@@ -1380,7 +1380,7 @@ export function SprintPlanningWorkflow() {
               onClick={() => runSavedConnectorAction("fetch-closed-story-points")}
             >
               <Table2 size={16} />
-              Jira story points
+              Jira net velocity
             </button>
             <button
               type="button"
@@ -1424,7 +1424,7 @@ export function SprintPlanningWorkflow() {
                   </span>
                   <span className="session-meta">
                     <small>{session.planningStatus.replaceAll("_", " ")}</small>
-                    <strong>{session.sprintVelocity} SP</strong>
+                    <strong>{session.sprintVelocity} net velocity</strong>
                     <small>
                       {session.pendingLeaveConfirmations} pending leaves · {session.connectorPendingSteps} connector
                       steps
@@ -1524,14 +1524,14 @@ export function SprintPlanningWorkflow() {
 
         <aside className="workflow-summary">
           <article className="output-card velocity-summary-card">
-            <SectionTitle icon={Goal} title="Sprint velocity" />
+            <SectionTitle icon={Goal} title="Sprint net velocity" />
             <div className="final-metric">
-              <span>Final sprint velocity</span>
+              <span>Final sprint net velocity</span>
               <strong>{summaryVelocity}</strong>
             </div>
             <Metric label="Average net velocity" value={planning.averageNetVelocity} />
             <Metric label="Available capacity days" value={planning.availableCapacityDays} />
-            <Metric label="Capacity-adjusted velocity" value={planning.capacityAdjustedVelocity} />
+            <Metric label="Capacity-adjusted net velocity" value={planning.capacityAdjustedVelocity} />
           </article>
 
           <article className="output-card">
@@ -1617,7 +1617,8 @@ function VelocityHistoryTable({
               <th scope="row">
                 <span>{row.sprintOffset === -1 ? "Last closed sprint" : `${Math.abs(row.sprintOffset)} sprints ago`}</span>
                 <small>
-                  {row.sprintName} · {row.completedStoryPoints} closed SP · {row.leaveDays} leave days ·{" "}
+                  {row.sprintName} · {row.netVelocity} net velocity · {row.completedStoryPoints} completed SP ·{" "}
+                  {row.leaveDays} leave days ·{" "}
                   <SourcePill source={row.source} />
                 </small>
               </th>
@@ -1636,8 +1637,8 @@ function VelocityHistoryTable({
         </tbody>
       </table>
       <p id="velocity-history-help">
-        Average is calculated from the three net velocity values. Jira import updates the last closed sprint story
-        points before the SM finalizes the override.
+        Average is calculated from the three net velocity values. Jira import updates the last closed sprint net
+        velocity before the SM finalizes the override.
       </p>
     </div>
   );

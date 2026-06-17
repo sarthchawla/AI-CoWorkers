@@ -57,7 +57,7 @@ export function createSlackLeaveConfirmationImportPreview(input: SlackLeaveConfi
     requestPreview: [
       `Hi team, please confirm leave updates for ${input.previousSprintName} and ${input.currentSprintName}.`,
       "Reply with previous sprint leave corrections and upcoming sprint leave days.",
-      "The Scrum Master will review the collected values before finalizing sprint velocity."
+      "The Scrum Master will review the collected values before finalizing sprint net velocity."
     ].join("\n"),
     confirmations: mockSlackLeaveConfirmations,
     formPatch: {
@@ -95,7 +95,7 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
   ].join("\n");
   const jiraCloseReportPreview = {
     closeSprintAction: `Close ${input.previousSprintName} on ${input.jiraBoardName}`,
-    reportingAction: `Fetch closed story points for ${input.previousSprintName} in ${input.jiraProjectKey}`,
+    reportingAction: `Fetch net velocity for ${input.previousSprintName} in ${input.jiraProjectKey}`,
     lastNetVelocity: input.lastNetVelocity
   };
   const sprintCloneSummary = {
@@ -152,7 +152,7 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
       {
         id: "finalize-sprint-velocity",
         status: "ready",
-        label: `Finalize sprint velocity at ${sprintVelocity} (${velocitySource})`
+        label: `Finalize sprint net velocity at ${sprintVelocity} (${velocitySource})`
       }
     ],
     automationPlan: [
@@ -174,12 +174,12 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
       {
         id: "fetch-closed-story-points",
         status: "connector-pending",
-        label: `Fetch completed story points for ${input.previousSprintName} from Jira`
+        label: `Fetch net velocity for ${input.previousSprintName} from Jira`
       },
       {
         id: "calculate-sprint-velocity",
         status: "ready",
-        label: "Calculate average, capacity-adjusted, and final sprint velocity"
+        label: "Calculate average, capacity-adjusted, and final sprint net velocity"
       }
     ]
   };
