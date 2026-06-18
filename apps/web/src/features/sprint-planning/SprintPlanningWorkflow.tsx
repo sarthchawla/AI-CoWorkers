@@ -84,6 +84,16 @@ import type {
   WorkflowStepState
 } from "./sprintPlanningTypes";
 
+type ScrumMasterTab = "sprint-planning" | "sprint-grooming" | "retro" | "mid-sprint-insights";
+type CoworkerTab =
+  | "scrum-master"
+  | "developer"
+  | "reviewer"
+  | "ops-expert"
+  | "architect"
+  | "security-expert"
+  | "performance-expert";
+
 const initialForm: PlanningForm = {
   teamKey: "pta",
   teamName: "PTA",
@@ -412,6 +422,8 @@ export function SprintPlanningWorkflow() {
   const [isDirty, setIsDirty] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SavedSprintPlanningSessionSummary[]>([]);
   const [viewMode, setViewMode] = useState<"home" | "workflow">("home");
+  const [coworkerTab, setCoworkerTab] = useState<CoworkerTab>("scrum-master");
+  const [scrumMasterTab, setScrumMasterTab] = useState<ScrumMasterTab>("sprint-planning");
   const [isSessionBrowserOpen, setIsSessionBrowserOpen] = useState(false);
   const [isConnectorRunning, setIsConnectorRunning] = useState(false);
   const [activeStepId, setActiveStepId] = useState<WorkflowStepId>("clone");
@@ -1542,6 +1554,46 @@ export function SprintPlanningWorkflow() {
     );
   }
 
+  function renderScrumMasterTabPlaceholder(title: string) {
+    return (
+      <Paper withBorder radius="md" p="xl">
+        <Group justify="space-between" align="flex-start" gap="md">
+          <Box>
+            <Title order={2} size="h3">
+              {title}
+            </Title>
+            <Text c="dimmed" mt={4}>
+              Workflow not configured yet.
+            </Text>
+          </Box>
+          <Badge variant="light" color="gray">
+            Next
+          </Badge>
+        </Group>
+      </Paper>
+    );
+  }
+
+  function renderCoworkerPlaceholder(title: string, description: string) {
+    return (
+      <Paper withBorder radius="md" p="xl">
+        <Group justify="space-between" align="flex-start" gap="md">
+          <Box>
+            <Title order={1} size="h2">
+              {title}
+            </Title>
+            <Text c="dimmed" mt={4}>
+              {description}
+            </Text>
+          </Box>
+          <Badge variant="light" color="gray">
+            Planned coworker
+          </Badge>
+        </Group>
+      </Paper>
+    );
+  }
+
   return (
     <AppShell header={{ height: 68 }} padding={0}>
       <AppShell.Header withBorder>
@@ -1553,10 +1605,10 @@ export function SprintPlanningWorkflow() {
               </Box>
               <Box>
                 <Text fw={800} lh={1.15}>
-                  AI CoWorkers / Scrum Master
+                  AI Coworkers
                 </Text>
                 <Text size="xs" c="dimmed" visibleFrom="sm">
-                  Jira-first sprint planning
+                  Scrum Master coworker
                 </Text>
               </Box>
             </Group>
@@ -1600,82 +1652,153 @@ export function SprintPlanningWorkflow() {
         {viewMode === "home" ? (
           <Container size="xl" py="xl">
             <Stack gap="lg">
-              <Group justify="space-between" align="flex-start" gap="md">
-                <Box>
-                  <Title order={1} size="h2">
-                    Sprint plans
-                  </Title>
-                  <Text c="dimmed" mt={4}>
-                    Resume, review, or clone sprint planning sessions.
-                  </Text>
-                </Box>
-                <Button leftSection={<Plus size={16} />} onClick={startNewPlanningSession}>
-                  New sprint plan
-                </Button>
-              </Group>
-
-              <Tabs value="sprint-planner">
+              <Tabs value={coworkerTab} onChange={(value) => setCoworkerTab((value as CoworkerTab) ?? "scrum-master")}>
                 <Tabs.List>
-                  <Tabs.Tab value="sprint-planner" leftSection={<FolderOpen size={15} />}>
-                    Sprint planner
+                  <Tabs.Tab value="scrum-master" leftSection={<Bot size={15} />}>
+                    Scrum Master
+                  </Tabs.Tab>
+                  <Tabs.Tab value="developer" leftSection={<UserRound size={15} />}>
+                    Developer
+                  </Tabs.Tab>
+                  <Tabs.Tab value="reviewer" leftSection={<MessageSquare size={15} />}>
+                    Reviewer
+                  </Tabs.Tab>
+                  <Tabs.Tab value="ops-expert" leftSection={<Settings2 size={15} />}>
+                    Ops expert
+                  </Tabs.Tab>
+                  <Tabs.Tab value="architect" leftSection={<Goal size={15} />}>
+                    Architect
+                  </Tabs.Tab>
+                  <Tabs.Tab value="security-expert" leftSection={<ClipboardCheck size={15} />}>
+                    Security expert
+                  </Tabs.Tab>
+                  <Tabs.Tab value="performance-expert" leftSection={<Sparkles size={15} />}>
+                    Performance expert
                   </Tabs.Tab>
                 </Tabs.List>
 
-                <Tabs.Panel value="sprint-planner" pt="lg">
+                <Tabs.Panel value="scrum-master" pt="lg">
                   <Stack gap="md">
-                    <Paper withBorder radius="md" p="md">
-                      <Group gap="sm" align="end">
-                        <TextInput
-                          label="Search sprint"
-                          placeholder="Q2S7 - 2026"
-                          leftSection={<Search size={16} />}
-                          value={sessionSearch}
-                          onChange={(event) => setSessionSearch(event.currentTarget.value)}
-                          className="session-search"
-                        />
-                        <Button
-                          variant="default"
-                          leftSection={<History size={16} />}
-                          onClick={() => refreshSavedSessions("Refreshing sprint planning sessions...")}
-                        >
-                          Refresh
+                    <Group justify="space-between" align="flex-start" gap="md">
+                      <Box>
+                        <Title order={1} size="h2">
+                          Scrum Master
+                        </Title>
+                        <Text c="dimmed" mt={4}>
+                          Jira-first workflows for sprint planning, grooming, retros, and sprint insights.
+                        </Text>
+                      </Box>
+                      {scrumMasterTab === "sprint-planning" ? (
+                        <Button leftSection={<Plus size={16} />} onClick={startNewPlanningSession}>
+                          New sprint plan
                         </Button>
-                      </Group>
-                    </Paper>
+                      ) : null}
+                    </Group>
 
-                    {savedSessions.length === 0 ? (
-                      <Paper withBorder radius="md" p="xl" ta="center">
-                        <FolderOpen size={34} aria-hidden="true" />
-                        <Title order={2} size="h3" mt="sm">
-                          No sprint plans saved yet
-                        </Title>
-                        <Text c="dimmed" mt={4}>
-                          Start a sprint plan and save it once to make it available here for resume and review.
-                        </Text>
-                        <Button mt="lg" leftSection={<Plus size={16} />} onClick={startNewPlanningSession}>
-                          Start sprint plan
-                        </Button>
-                      </Paper>
-                    ) : visibleSavedSessions.length === 0 ? (
-                      <Paper withBorder radius="md" p="xl" ta="center">
-                        <Title order={2} size="h3">
-                          No matching sprint plans
-                        </Title>
-                        <Text c="dimmed" mt={4}>
-                          Clear the search to see saved sprint plans.
-                        </Text>
-                      </Paper>
-                    ) : (
-                      visibleSavedSessions.map((session) => (
-                        <SprintPlanCard
-                          key={session.sessionId}
-                          session={session}
-                          onOpen={() => loadSession(session.sessionId)}
-                          onClone={() => cloneSavedSession(session.sessionId)}
-                        />
-                      ))
-                    )}
+                    <Tabs
+                      value={scrumMasterTab}
+                      onChange={(value) => setScrumMasterTab((value as ScrumMasterTab) ?? "sprint-planning")}
+                    >
+                      <Tabs.List>
+                        <Tabs.Tab value="sprint-planning" leftSection={<FolderOpen size={15} />}>
+                          Sprint planning
+                        </Tabs.Tab>
+                        <Tabs.Tab value="sprint-grooming" leftSection={<ListChecks size={15} />}>
+                          Sprint grooming
+                        </Tabs.Tab>
+                        <Tabs.Tab value="retro" leftSection={<History size={15} />}>
+                          Retro
+                        </Tabs.Tab>
+                        <Tabs.Tab value="mid-sprint-insights" leftSection={<Sparkles size={15} />}>
+                          Mid-sprint insights
+                        </Tabs.Tab>
+                      </Tabs.List>
+
+                      <Tabs.Panel value="sprint-planning" pt="lg">
+                        <Stack gap="md">
+                          <Paper withBorder radius="md" p="md">
+                            <Group gap="sm" align="end">
+                              <TextInput
+                                label="Search sprint"
+                                placeholder="Q2S7 - 2026"
+                                leftSection={<Search size={16} />}
+                                value={sessionSearch}
+                                onChange={(event) => setSessionSearch(event.currentTarget.value)}
+                                className="session-search"
+                              />
+                              <Button
+                                variant="default"
+                                leftSection={<History size={16} />}
+                                onClick={() => refreshSavedSessions("Refreshing sprint planning sessions...")}
+                              >
+                                Refresh
+                              </Button>
+                            </Group>
+                          </Paper>
+
+                          {savedSessions.length === 0 ? (
+                            <Paper withBorder radius="md" p="xl" ta="center">
+                              <FolderOpen size={34} aria-hidden="true" />
+                              <Title order={2} size="h3" mt="sm">
+                                No sprint plans saved yet
+                              </Title>
+                              <Text c="dimmed" mt={4}>
+                                Start a sprint plan and save it once to make it available here for resume and review.
+                              </Text>
+                              <Button mt="lg" leftSection={<Plus size={16} />} onClick={startNewPlanningSession}>
+                                Start sprint plan
+                              </Button>
+                            </Paper>
+                          ) : visibleSavedSessions.length === 0 ? (
+                            <Paper withBorder radius="md" p="xl" ta="center">
+                              <Title order={2} size="h3">
+                                No matching sprint plans
+                              </Title>
+                              <Text c="dimmed" mt={4}>
+                                Clear the search to see saved sprint plans.
+                              </Text>
+                            </Paper>
+                          ) : (
+                            visibleSavedSessions.map((session) => (
+                              <SprintPlanCard
+                                key={session.sessionId}
+                                session={session}
+                                onOpen={() => loadSession(session.sessionId)}
+                                onClone={() => cloneSavedSession(session.sessionId)}
+                              />
+                            ))
+                          )}
+                        </Stack>
+                      </Tabs.Panel>
+                      <Tabs.Panel value="sprint-grooming" pt="lg">
+                        {renderScrumMasterTabPlaceholder("Sprint grooming")}
+                      </Tabs.Panel>
+                      <Tabs.Panel value="retro" pt="lg">
+                        {renderScrumMasterTabPlaceholder("Retro")}
+                      </Tabs.Panel>
+                      <Tabs.Panel value="mid-sprint-insights" pt="lg">
+                        {renderScrumMasterTabPlaceholder("Mid-sprint insights")}
+                      </Tabs.Panel>
+                    </Tabs>
                   </Stack>
+                </Tabs.Panel>
+                <Tabs.Panel value="developer" pt="lg">
+                  {renderCoworkerPlaceholder("Developer", "Developer coworker workflows will live here.")}
+                </Tabs.Panel>
+                <Tabs.Panel value="reviewer" pt="lg">
+                  {renderCoworkerPlaceholder("Reviewer", "Reviewer coworker workflows will live here.")}
+                </Tabs.Panel>
+                <Tabs.Panel value="ops-expert" pt="lg">
+                  {renderCoworkerPlaceholder("Ops expert (debugger)", "Debugging and operational investigation workflows will live here.")}
+                </Tabs.Panel>
+                <Tabs.Panel value="architect" pt="lg">
+                  {renderCoworkerPlaceholder("Architect", "Architecture review and design workflows will live here.")}
+                </Tabs.Panel>
+                <Tabs.Panel value="security-expert" pt="lg">
+                  {renderCoworkerPlaceholder("Security expert", "Security review and threat-modeling workflows will live here.")}
+                </Tabs.Panel>
+                <Tabs.Panel value="performance-expert" pt="lg">
+                  {renderCoworkerPlaceholder("Performance expert", "Performance analysis and optimization workflows will live here.")}
                 </Tabs.Panel>
               </Tabs>
             </Stack>
