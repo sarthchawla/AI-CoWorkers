@@ -3,11 +3,27 @@ import { z } from "zod";
 export const teamSprintPlanningConfigSchema = z.object({
   teamKey: z.string().min(1),
   teamName: z.string().min(1),
+  members: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        externalUserId: z.string().optional(),
+        slackUserId: z.string().optional(),
+        role: z.string().optional(),
+        active: z.boolean().default(true)
+      })
+    )
+    .default([]),
   jira: z.object({
+    cloudId: z.string().optional(),
     projectName: z.string().optional(),
+    projectId: z.string().optional(),
     projectKey: z.string().min(1),
     boardName: z.string().min(1),
-    boardId: z.string().optional()
+    boardId: z.string().optional(),
+    sprintField: z.string().optional(),
+    storyPointsField: z.string().optional(),
+    doneStatusCategory: z.string().optional()
   }),
   slack: z.object({
     channelName: z.string().min(1),

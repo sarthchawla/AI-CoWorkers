@@ -1,9 +1,14 @@
-import type { JiraReportingImportInput, SprintPlanningInput } from "./schema.js";
-import { getSprintPlanningConnectorModeLabel } from "../connectors/connectorEnvironment.js";
+import type { JiraReportingImportInput, SprintPlanningInput, VelocityHistoryRowInput } from "./schema.js";
+import {
+  getSprintPlanningConnectorMode,
+  getSprintPlanningConnectorModeLabel
+} from "../connectors/connectorEnvironment.js";
+import { readJiraVelocityHistory } from "../connectors/jiraClient.js";
 import {
   mockJiraSprintIds,
   mockJiraVelocityHistory
 } from "../connectors/mockSprintPlanningData.js";
+import { getTeamSprintPlanningConfig } from "./teamConfigRepository.js";
 
 function withJiraSprintId(row: (typeof mockJiraVelocityHistory)[number]) {
   return {
@@ -13,9 +18,16 @@ function withJiraSprintId(row: (typeof mockJiraVelocityHistory)[number]) {
   };
 }
 
-export function createJiraReportingImportPreview(input: JiraReportingImportInput) {
-  const velocityHistory = mockJiraVelocityHistory.map(withJiraSprintId);
-  const lastClosedSprint = velocityHistory.find((row) => row.sprintOffset === -1) ?? velocityHistory[2];
+function createJiraReportingPreviewResponse(
+  input: JiraReportingImportInput,
+  velocityHistory: VelocityHistoryRowInput[],
+  warnings: string[]
+) {
+  const lastClosedSprint = velocityHistory.find((row) => row.sprintOffset === -1) ?? velocityHistory.at(-1);
+
+  if (!lastClosedSprint) {
+    throw new Error("Jira reporting import did not return any velocity history rows");
+  }
 
   return {
     projectKey: input.jiraProjectKey,
@@ -26,18 +38,37 @@ export function createJiraReportingImportPreview(input: JiraReportingImportInput
       sprintName: lastClosedSprint.sprintName,
       jiraSprintId: lastClosedSprint.jiraSprintId,
       completedStoryPoints: lastClosedSprint.completedStoryPoints,
-      source: "mock-jira-report"
+      source: lastClosedSprint.source
     },
     formPatch: {
       previousVelocityMinus3: velocityHistory.find((row) => row.sprintOffset === -3)?.netVelocity ?? 0,
       previousVelocityMinus2: velocityHistory.find((row) => row.sprintOffset === -2)?.netVelocity ?? 0,
       lastNetVelocity: lastClosedSprint.netVelocity
     },
-    warnings: [
-      `Using ${getSprintPlanningConnectorModeLabel()} Jira reporting data until Jira API or MCP connector is configured.`,
-      `Previous sprint requested: ${input.previousSprintName}`
-    ]
+    warnings
   };
+}
+
+export async function createJiraReportingImportPreview(input: JiraReportingImportInput) {
+  if (getSprintPlanningConnectorMode() === "jira") {
+    const teamConfig = await getTeamSprintPlanningConfig(input.teamKey ?? "pta");
+    const preview = await readJiraVelocityHistory({
+      teamConfig,
+      previousSprintName: input.previousSprintName,
+      sprintCount: input.sprintCount
+    });
+
+    return createJiraReportingPreviewResponse(input, preview.velocityHistory, [
+      "Using live Jira reporting data with read-only Jira API calls.",
+      `Previous sprint requested: ${input.previousSprintName}`,
+      ...preview.warnings
+    ]);
+  }
+
+  return createJiraReportingPreviewResponse(input, mockJiraVelocityHistory.map(withJiraSprintId), [
+    `Using ${getSprintPlanningConnectorModeLabel()} Jira reporting data until Jira connector mode is enabled.`,
+    `Previous sprint requested: ${input.previousSprintName}`
+  ]);
 }
 
 function roundVelocity(value: number) {

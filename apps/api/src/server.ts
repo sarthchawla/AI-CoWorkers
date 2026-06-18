@@ -1,10 +1,16 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { getSprintPlanningConnectorModeLabel } from "./connectors/connectorEnvironment.js";
 import { sprintPlanningRouter } from "./sprint-planning/routes.js";
 
+const currentFile = fileURLToPath(import.meta.url);
+const repoRoot = path.resolve(path.dirname(currentFile), "../../..");
+
+dotenv.config({ path: path.join(repoRoot, ".env") });
 dotenv.config();
 
 const app = express();

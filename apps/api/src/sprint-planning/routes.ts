@@ -183,7 +183,7 @@ sprintPlanningRouter.post(
   }
 );
 
-sprintPlanningRouter.post("/jira-reporting/import-preview", (request, response) => {
+sprintPlanningRouter.post("/jira-reporting/import-preview", async (request, response, next) => {
   const parsedInput = jiraReportingImportSchema.safeParse(request.body);
 
   if (!parsedInput.success) {
@@ -195,10 +195,14 @@ sprintPlanningRouter.post("/jira-reporting/import-preview", (request, response) 
     return;
   }
 
-  response.json({
-    status: "success",
-    data: createJiraReportingImportPreview(parsedInput.data)
-  });
+  try {
+    response.json({
+      status: "success",
+      data: await createJiraReportingImportPreview(parsedInput.data)
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 function createWorkflowDraft(request: Request, response: Response) {

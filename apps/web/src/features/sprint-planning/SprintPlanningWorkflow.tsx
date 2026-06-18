@@ -16,6 +16,7 @@ import {
   Paper,
   SimpleGrid,
   Stack,
+  Switch,
   Tabs,
   Table,
   Text,
@@ -41,6 +42,7 @@ import {
   Settings2,
   Sparkles,
   Table2,
+  Trash2,
   UserRound
 } from "lucide-react";
 import {
@@ -79,6 +81,7 @@ import type {
   ScrumMasterStatusResponse,
   SprintPlanningConnectorActionKey,
   SprintPlanningInput,
+  TeamMember,
   VelocityHistoryRow,
   WorkflowStepId,
   WorkflowStepState
@@ -97,9 +100,15 @@ type CoworkerTab =
 const initialForm: PlanningForm = {
   teamKey: "pta",
   teamName: "PTA",
-  jiraProjectName: "PTA",
+  jiraProjectName: "PTA Trip planner Agent",
+  jiraCloudId: "681413ed-e457-48de-8251-e5aa1222e0e2",
+  jiraProjectId: "14791",
   jiraProjectKey: "PTATPA",
   jiraBoardName: "PTA Sprint Board",
+  jiraBoardId: "10357",
+  jiraSprintField: "customfield_10020",
+  jiraStoryPointsField: "customfield_10024",
+  jiraDoneStatusCategory: "done",
   slackChannel: "#pta-sprint-planning",
   sprintNamingPattern: "Q{quarter}S{sprint} - {year}",
   previousSprintName: "Q2S6 - 2026",
@@ -233,6 +242,14 @@ const initialLeaveConfirmations: LeaveConfirmationRow[] = [
   }
 ];
 
+const initialTeamMembers: TeamMember[] = initialLeaveConfirmations.map((member) => ({
+  name: member.teammateName,
+  externalUserId: member.slackUserId.replace(/^U-/, "").toLowerCase(),
+  slackUserId: member.slackUserId,
+  role: "Engineer",
+  active: true
+}));
+
 const workflowStepDefinitions: WorkflowStepDefinition[] = [
   {
     id: "clone",
@@ -340,6 +357,42 @@ function createSlackLeaveRequestMessage(form: PlanningForm) {
   ].join("\n");
 }
 
+function activeTeamMemberCount(members: TeamMember[]) {
+  return Math.max(members.filter((member) => member.active).length, 1);
+}
+
+function createLeaveRowForMember(member: TeamMember): LeaveConfirmationRow {
+  return {
+    teammateName: member.name,
+    slackUserId: member.slackUserId || member.externalUserId || member.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    previousSprintLeaveDays: 0,
+    upcomingSprintLeaveDays: 0,
+    confirmationStatus: "pending",
+    source: "manual"
+  };
+}
+
+function syncLeaveRowsWithTeamMembers(members: TeamMember[], currentRows: LeaveConfirmationRow[]) {
+  return members
+    .filter((member) => member.active)
+    .map((member) => {
+      const memberId = member.slackUserId || member.externalUserId || member.name;
+      const existingRow = currentRows.find(
+        (row) =>
+          row.slackUserId === member.slackUserId ||
+          row.slackUserId === member.externalUserId ||
+          row.teammateName === member.name ||
+          row.slackUserId === memberId
+      );
+
+      return {
+        ...(existingRow ?? createLeaveRowForMember(member)),
+        teammateName: member.name,
+        slackUserId: memberId
+      };
+    });
+}
+
 function toPerDeveloperOverride(input: SprintPlanningInput) {
   if (input.manualVelocityOverride == null || input.teamMemberCount <= 0) {
     return "";
@@ -353,8 +406,14 @@ function toPlanningForm(input: SprintPlanningInput): PlanningForm {
     teamKey: input.teamKey ?? "",
     teamName: input.teamName,
     jiraProjectName: "",
+    jiraCloudId: "",
+    jiraProjectId: "",
     jiraProjectKey: input.jiraProjectKey,
     jiraBoardName: input.jiraBoardName,
+    jiraBoardId: "",
+    jiraSprintField: "customfield_10020",
+    jiraStoryPointsField: "customfield_10024",
+    jiraDoneStatusCategory: "done",
     slackChannel: input.slackChannel,
     sprintNamingPattern: "Q{quarter}S{sprint} - {year}",
     previousSprintName: input.previousSprintName,
@@ -413,6 +472,7 @@ function calculateTargetRows(
 export function SprintPlanningWorkflow() {
   const [form, setForm] = useState(initialForm);
   const [velocityHistory, setVelocityHistory] = useState(initialVelocityHistory);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(initialTeamMembers);
   const [leaveConfirmations, setLeaveConfirmations] = useState(initialLeaveConfirmations);
   const [draftStatus, setDraftStatus] = useState("Not synced with API yet");
   const [apiPlan, setApiPlan] = useState<DraftResponse["data"] | null>(null);
@@ -421,7 +481,7 @@ export function SprintPlanningWorkflow() {
   const [lastSavedAt, setLastSavedAt] = useState("");
   const [isDirty, setIsDirty] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SavedSprintPlanningSessionSummary[]>([]);
-  const [viewMode, setViewMode] = useState<"home" | "workflow">("home");
+  const [viewMode, setViewMode] = useState<"home" | "workflow" | "team-settings">("home");
   const [coworkerTab, setCoworkerTab] = useState<CoworkerTab>("scrum-master");
   const [scrumMasterTab, setScrumMasterTab] = useState<ScrumMasterTab>("sprint-planning");
   const [isSessionBrowserOpen, setIsSessionBrowserOpen] = useState(false);
@@ -429,7 +489,6 @@ export function SprintPlanningWorkflow() {
   const [activeStepId, setActiveStepId] = useState<WorkflowStepId>("clone");
   const [completedStepIds, setCompletedStepIds] = useState<WorkflowStepId[]>([]);
   const [scrumMasterStatus, setScrumMasterStatus] = useState<ScrumMasterStatusResponse | null>(null);
-  const [isTeamProfileOpen, setIsTeamProfileOpen] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
   const [slackLeaveMessageDraft, setSlackLeaveMessageDraft] = useState(() =>
     createSlackLeaveRequestMessage(initialForm)
@@ -580,6 +639,25 @@ export function SprintPlanningWorkflow() {
     }));
   }
 
+  function applyTeamMembers(nextMembers: TeamMember[], statusMessage?: string) {
+    const nextRows = syncLeaveRowsWithTeamMembers(nextMembers, leaveConfirmations);
+
+    setTeamMembers(nextMembers);
+    setLeaveConfirmations(nextRows);
+    setForm((current) => ({
+      ...current,
+      teamMemberCount: activeTeamMemberCount(nextMembers),
+      previousSprintLeaveDays: nextRows.reduce((sum, row) => sum + row.previousSprintLeaveDays, 0),
+      upcomingSprintLeaveDays: nextRows.reduce((sum, row) => sum + row.upcomingSprintLeaveDays, 0)
+    }));
+
+    if (statusMessage) {
+      setDraftStatus(statusMessage);
+    }
+
+    markDirty();
+  }
+
   function updateLeaveConfirmation(
     slackUserId: string,
     field: keyof Pick<LeaveConfirmationRow, "previousSprintLeaveDays" | "upcomingSprintLeaveDays">,
@@ -603,11 +681,36 @@ export function SprintPlanningWorkflow() {
     markDirty();
   }
 
-  function updateTeamMember(index: number, field: "teammateName" | "slackUserId", value: string) {
-    setLeaveConfirmations((current) =>
-      current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value, source: "manual" } : row))
+  function updateTeamMember(index: number, field: keyof TeamMember, value: string | boolean) {
+    applyTeamMembers(
+      teamMembers.map((member, memberIndex) => (memberIndex === index ? { ...member, [field]: value } : member)),
+      "Team member updated; sprint planning calculations will use the active roster"
     );
-    markDirty();
+  }
+
+  function addTeamMember() {
+    const nextIndex = teamMembers.length + 1;
+
+    applyTeamMembers(
+      [
+        ...teamMembers,
+        {
+          name: `New teammate ${nextIndex}`,
+          externalUserId: `teammate-${nextIndex}`,
+          slackUserId: `U-TEAMMATE-${nextIndex}`,
+          role: "Engineer",
+          active: true
+        }
+      ],
+      "Team member added; edit the roster details before saving team settings"
+    );
+  }
+
+  function removeTeamMember(index: number) {
+    applyTeamMembers(
+      teamMembers.filter((_, memberIndex) => memberIndex !== index),
+      "Team member removed from active planning roster"
+    );
   }
 
   async function generateDraft() {
@@ -630,19 +733,31 @@ export function SprintPlanningWorkflow() {
     try {
       const payload = await getSprintPlanningTeamConfig(form.teamKey);
       const config = payload.data;
+      const nextMembers = config.members.length > 0 ? config.members : initialTeamMembers;
+      const nextLeaveRows = syncLeaveRowsWithTeamMembers(nextMembers, leaveConfirmations);
 
       setForm((current) => ({
         ...current,
         teamKey: config.teamKey,
         teamName: config.teamName,
         jiraProjectName: config.jira.projectName ?? "",
+        jiraCloudId: config.jira.cloudId ?? "",
+        jiraProjectId: config.jira.projectId ?? "",
         jiraProjectKey: config.jira.projectKey,
         jiraBoardName: config.jira.boardName,
+        jiraBoardId: config.jira.boardId ?? "",
+        jiraSprintField: config.jira.sprintField ?? current.jiraSprintField,
+        jiraStoryPointsField: config.jira.storyPointsField ?? current.jiraStoryPointsField,
+        jiraDoneStatusCategory: config.jira.doneStatusCategory ?? current.jiraDoneStatusCategory,
         slackChannel: config.slack.channelName,
-        teamMemberCount: config.defaults.teamMemberCount,
+        teamMemberCount: activeTeamMemberCount(nextMembers),
+        previousSprintLeaveDays: nextLeaveRows.reduce((sum, row) => sum + row.previousSprintLeaveDays, 0),
+        upcomingSprintLeaveDays: nextLeaveRows.reduce((sum, row) => sum + row.upcomingSprintLeaveDays, 0),
         daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays,
         sprintNamingPattern: config.defaults.sprintNamingPattern ?? current.sprintNamingPattern
       }));
+      setTeamMembers(nextMembers);
+      setLeaveConfirmations(nextLeaveRows);
       setDraftStatus("Team config loaded from backend defaults");
       markDirty();
     } catch {
@@ -657,38 +772,81 @@ export function SprintPlanningWorkflow() {
       const payload = await saveSprintPlanningTeamConfig({
         teamKey: form.teamKey,
         teamName: form.teamName,
+        members: teamMembers,
         jira: {
+          cloudId: form.jiraCloudId,
           projectName: form.jiraProjectName,
+          projectId: form.jiraProjectId,
           projectKey: form.jiraProjectKey,
-          boardName: form.jiraBoardName
+          boardName: form.jiraBoardName,
+          boardId: form.jiraBoardId,
+          sprintField: form.jiraSprintField,
+          storyPointsField: form.jiraStoryPointsField,
+          doneStatusCategory: form.jiraDoneStatusCategory
         },
         slack: {
           channelName: form.slackChannel
         },
         defaults: {
-          teamMemberCount: form.teamMemberCount,
+          teamMemberCount: activeTeamMemberCount(teamMembers),
           daysInSprintExcludingHolidays: form.daysInSprintExcludingHolidays,
           sprintNamingPattern: form.sprintNamingPattern
         }
       });
       const config = payload.data;
+      const nextMembers = config.members.length > 0 ? config.members : teamMembers;
+      const nextLeaveRows = syncLeaveRowsWithTeamMembers(nextMembers, leaveConfirmations);
 
       setForm((current) => ({
         ...current,
         teamKey: config.teamKey,
         teamName: config.teamName,
         jiraProjectName: config.jira.projectName ?? "",
+        jiraCloudId: config.jira.cloudId ?? "",
+        jiraProjectId: config.jira.projectId ?? "",
         jiraProjectKey: config.jira.projectKey,
         jiraBoardName: config.jira.boardName,
+        jiraBoardId: config.jira.boardId ?? "",
+        jiraSprintField: config.jira.sprintField ?? current.jiraSprintField,
+        jiraStoryPointsField: config.jira.storyPointsField ?? current.jiraStoryPointsField,
+        jiraDoneStatusCategory: config.jira.doneStatusCategory ?? current.jiraDoneStatusCategory,
         slackChannel: config.slack.channelName,
-        teamMemberCount: config.defaults.teamMemberCount,
+        teamMemberCount: activeTeamMemberCount(nextMembers),
+        previousSprintLeaveDays: nextLeaveRows.reduce((sum, row) => sum + row.previousSprintLeaveDays, 0),
+        upcomingSprintLeaveDays: nextLeaveRows.reduce((sum, row) => sum + row.upcomingSprintLeaveDays, 0),
         daysInSprintExcludingHolidays: config.defaults.daysInSprintExcludingHolidays,
         sprintNamingPattern: config.defaults.sprintNamingPattern ?? current.sprintNamingPattern
       }));
+      setTeamMembers(nextMembers);
+      setLeaveConfirmations(nextLeaveRows);
       setDraftStatus("Team connector config saved for current environment");
     } catch {
       setDraftStatus("Team connector config save failed");
     }
+  }
+
+  function prefetchJiraTeamMetadata() {
+    const projectKey = form.jiraProjectKey.trim().toUpperCase();
+
+    if (projectKey !== "PTATPA") {
+      setDraftStatus(`No built-in Jira metadata found for ${projectKey || "this project"}; enter the fields manually`);
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      jiraCloudId: "681413ed-e457-48de-8251-e5aa1222e0e2",
+      jiraProjectName: "PTA Trip planner Agent",
+      jiraProjectId: "14791",
+      jiraProjectKey: "PTATPA",
+      jiraBoardName: current.jiraBoardName || "PTA Sprint Board",
+      jiraBoardId: "10357",
+      jiraSprintField: "customfield_10020",
+      jiraStoryPointsField: "customfield_10024",
+      jiraDoneStatusCategory: "done"
+    }));
+    setDraftStatus("Prefetched PTATPA Jira metadata from known Atlassian MCP lookup; verify before saving");
+    markDirty();
   }
 
   async function importJiraVelocityHistory() {
@@ -997,8 +1155,8 @@ export function SprintPlanningWorkflow() {
             </Paper>
           </SimpleGrid>
           <Alert variant="light" color="teal" title="Team config is central">
-            Manage team membership, Jira project defaults, and sprint naming from the Teams tab. Use Open to choose a
-            previous sprint session, then Clone to create the next sprint from saved context.
+            Manage team membership, Jira project defaults, and sprint naming from Profile / Team settings. Use Open to
+            choose a previous sprint session, then Clone to create the next sprint from saved context.
           </Alert>
         </Stack>
       );
@@ -1064,10 +1222,11 @@ export function SprintPlanningWorkflow() {
               onChange={(value) => updateNumber("holidayCount", numberInputValue(value))}
             />
             <NumberInput
-              label="Team members"
+              label="Active team members"
+              description="Managed from Profile / Team settings"
               min={1}
               value={form.teamMemberCount}
-              onChange={(value) => updateNumber("teamMemberCount", numberInputValue(value))}
+              disabled
             />
           </SimpleGrid>
         </Stack>
@@ -1416,141 +1575,238 @@ export function SprintPlanningWorkflow() {
 
   function renderTeamProfileContent() {
     return (
-      <Grid gap="lg" align="flex-start">
-        <Grid.Col span={{ base: 12, lg: 7 }}>
-          <Paper withBorder radius="md" p="lg">
+      <Stack gap="lg">
+        <Paper withBorder radius="md" p="md">
+          <Group justify="space-between" align="flex-start" gap="md">
+            <Box>
+              <Badge color="teal" variant="light" mb={6}>
+                Profile / Team
+              </Badge>
+              <Title order={1} size="h2">
+                Team settings
+              </Title>
+              <Text c="dimmed" mt={4}>
+                Team roster, Jira defaults, sprint naming, and planning defaults shared by current and future coworkers.
+              </Text>
+            </Box>
+            <Group gap="xs">
+              <Button variant="default" leftSection={<History size={16} />} onClick={() => setViewMode("home")}>
+                Sprint planner
+              </Button>
+              <Button variant="default" leftSection={<Settings2 size={16} />} onClick={loadTeamConfig}>
+                Load
+              </Button>
+              <Button variant="default" leftSection={<Sparkles size={16} />} onClick={prefetchJiraTeamMetadata}>
+                Prefetch Jira config
+              </Button>
+              <Button leftSection={<SaveIcon size={16} />} onClick={saveTeamConfig}>
+                Save team settings
+              </Button>
+            </Group>
+          </Group>
+        </Paper>
+
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+          <MetricBlock label="Active members" value={activeTeamMemberCount(teamMembers)} caption="used for velocity/dev" />
+          <MetricBlock label="Net velocity/dev" value={summaryVelocityPerDeveloper} caption={`${summaryVelocity} total`} />
+          <MetricBlock
+            label="Leave days"
+            value={form.previousSprintLeaveDays + form.upcomingSprintLeaveDays}
+            caption="from active leave rows"
+          />
+        </SimpleGrid>
+
+        <Alert color="blue" variant="light" title="Profile-owned team context">
+          A user can belong to multiple teams, and each team can have multiple users. For now, this page keeps one active
+          team view editable in local config; later DevPortal can own the roster and Jira can provide the current active
+          sprint.
+        </Alert>
+
+        <Grid gap="lg" align="flex-start">
+          <Grid.Col span={{ base: 12, lg: 8 }}>
             <Stack gap="lg">
-              <Group justify="space-between" align="flex-start" gap="md">
-                <SectionHeading
-                  icon={Settings2}
-                  title="Team profile"
-                  description="Team defaults shared by current and future coworkers."
-                />
-                <Group gap="xs">
-                  <Button variant="default" leftSection={<Settings2 size={16} />} onClick={loadTeamConfig}>
-                    Load
-                  </Button>
-                  <Button variant="light" leftSection={<SaveIcon size={16} />} onClick={saveTeamConfig}>
-                    Save
+              <Paper withBorder radius="md" p="lg">
+                <Group justify="space-between" align="flex-start" gap="md" mb="md">
+                  <SectionHeading
+                    icon={UserRound}
+                    title="Team roster"
+                    description="Active members are used for sprint capacity, net velocity/dev, and leave collection rows."
+                  />
+                  <Button leftSection={<Plus size={16} />} onClick={addTeamMember}>
+                    Add member
                   </Button>
                 </Group>
-              </Group>
+                <Table.ScrollContainer minWidth={900}>
+                  <Table verticalSpacing="xs" withTableBorder>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Name</Table.Th>
+                        <Table.Th>Role</Table.Th>
+                        <Table.Th>DevPortal/user id</Table.Th>
+                        <Table.Th>Slack id</Table.Th>
+                        <Table.Th>Active</Table.Th>
+                        <Table.Th />
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {teamMembers.map((member, index) => (
+                        <Table.Tr key={`${member.slackUserId || member.externalUserId || member.name}-${index}`}>
+                          <Table.Td>
+                            <TextInput
+                              aria-label={`Team member ${index + 1} name`}
+                              value={member.name}
+                              onChange={(event) => updateTeamMember(index, "name", event.currentTarget.value)}
+                            />
+                          </Table.Td>
+                          <Table.Td>
+                            <TextInput
+                              aria-label={`Team member ${index + 1} role`}
+                              value={member.role ?? ""}
+                              onChange={(event) => updateTeamMember(index, "role", event.currentTarget.value)}
+                            />
+                          </Table.Td>
+                          <Table.Td>
+                            <TextInput
+                              aria-label={`Team member ${index + 1} DevPortal user id`}
+                              value={member.externalUserId ?? ""}
+                              onChange={(event) => updateTeamMember(index, "externalUserId", event.currentTarget.value)}
+                            />
+                          </Table.Td>
+                          <Table.Td>
+                            <TextInput
+                              aria-label={`Team member ${index + 1} Slack id`}
+                              value={member.slackUserId ?? ""}
+                              onChange={(event) => updateTeamMember(index, "slackUserId", event.currentTarget.value)}
+                            />
+                          </Table.Td>
+                          <Table.Td>
+                            <Switch
+                              aria-label={`Team member ${index + 1} active`}
+                              checked={member.active}
+                              onChange={(event) => updateTeamMember(index, "active", event.currentTarget.checked)}
+                            />
+                          </Table.Td>
+                          <Table.Td>
+                            <Button
+                              variant="subtle"
+                              color="red"
+                              leftSection={<Trash2 size={15} />}
+                              onClick={() => removeTeamMember(index)}
+                            >
+                              Remove
+                            </Button>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </Table.ScrollContainer>
+              </Paper>
 
-              <Alert color="blue" variant="light" title="Profile-owned team context">
-                A user can belong to multiple teams, and each team can have multiple users. For now, this profile keeps
-                one active team view at a time; later the profile dropdown can switch teams from DevPortal while Jira
-                provides the current active sprint.
-              </Alert>
-
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                <TextInput
-                  label="Team key"
-                  value={form.teamKey}
-                  onChange={(event) => updateText("teamKey", event.currentTarget.value)}
-                />
-                <TextInput
-                  label="Team name"
-                  value={form.teamName}
-                  onChange={(event) => updateText("teamName", event.currentTarget.value)}
-                />
-                <TextInput
-                  label="Team project name"
-                  value={form.jiraProjectName}
-                  onChange={(event) => updateText("jiraProjectName", event.currentTarget.value)}
-                />
-                <TextInput
-                  label="Jira project key"
-                  value={form.jiraProjectKey}
-                  onChange={(event) => updateText("jiraProjectKey", event.currentTarget.value)}
-                />
-                <TextInput
-                  label="Jira board"
-                  value={form.jiraBoardName}
-                  onChange={(event) => updateText("jiraBoardName", event.currentTarget.value)}
-                />
-                <TextInput
-                  label="Manual leave channel"
-                  value={form.slackChannel}
-                  onChange={(event) => updateText("slackChannel", event.currentTarget.value)}
-                />
-                <TextInput
-                  label="Sprint naming pattern"
-                  placeholder="Q{quarter}S{sprint} - {year}"
-                  value={form.sprintNamingPattern}
-                  onChange={(event) => updateText("sprintNamingPattern", event.currentTarget.value)}
-                />
-                <NumberInput
-                  label="Default working days"
-                  min={0}
-                  value={form.daysInSprintExcludingHolidays}
-                  onChange={(value) => updateNumber("daysInSprintExcludingHolidays", numberInputValue(value))}
-                />
-                <NumberInput
-                  label="Team members"
-                  min={1}
-                  value={form.teamMemberCount}
-                  onChange={(value) => updateNumber("teamMemberCount", numberInputValue(value))}
-                />
-              </SimpleGrid>
+              <Paper withBorder radius="md" p="lg">
+                <SectionHeading icon={Settings2} title="Team defaults" />
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="md">
+                  <TextInput
+                    label="Team key"
+                    value={form.teamKey}
+                    onChange={(event) => updateText("teamKey", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Team name"
+                    value={form.teamName}
+                    onChange={(event) => updateText("teamName", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Manual leave channel"
+                    value={form.slackChannel}
+                    onChange={(event) => updateText("slackChannel", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Sprint naming pattern"
+                    placeholder="Q{quarter}S{sprint} - {year}"
+                    value={form.sprintNamingPattern}
+                    onChange={(event) => updateText("sprintNamingPattern", event.currentTarget.value)}
+                  />
+                  <NumberInput
+                    label="Default working days"
+                    min={0}
+                    value={form.daysInSprintExcludingHolidays}
+                    onChange={(value) => updateNumber("daysInSprintExcludingHolidays", numberInputValue(value))}
+                  />
+                  <TextInput label="Active member count" value={String(activeTeamMemberCount(teamMembers))} readOnly />
+                </SimpleGrid>
+              </Paper>
             </Stack>
-          </Paper>
-        </Grid.Col>
+          </Grid.Col>
 
-        <Grid.Col span={{ base: 12, lg: 5 }}>
-          <Stack gap="lg">
-            <Paper withBorder radius="md" p="lg">
-              <SectionHeading icon={Goal} title="Current active sprint" />
-              <Stack gap="sm" mt="lg">
-                <InfoRow label="Team" value={form.teamName} />
-                <InfoRow label="Sprint" value={form.currentSprintName} />
-                <InfoRow label="Dates" value={`${form.currentSprintStart} to ${form.currentSprintEnd}`} />
-                <InfoRow label="Previous sprint" value={form.previousSprintName} />
-                <InfoRow label="Sprint source" value="Jira active sprint later" />
-                <InfoRow label="Net velocity/dev" value={String(summaryVelocityPerDeveloper)} />
-              </Stack>
-            </Paper>
+          <Grid.Col span={{ base: 12, lg: 4 }}>
+            <Stack gap="lg">
+              <Paper withBorder radius="md" p="lg">
+                <SectionHeading icon={Goal} title="Current active sprint" />
+                <Stack gap="sm" mt="lg">
+                  <InfoRow label="Team" value={form.teamName} />
+                  <InfoRow label="Sprint" value={form.currentSprintName} />
+                  <InfoRow label="Dates" value={`${form.currentSprintStart} to ${form.currentSprintEnd}`} />
+                  <InfoRow label="Previous sprint" value={form.previousSprintName} />
+                  <InfoRow label="Sprint source" value="Jira active sprint later" />
+                  <InfoRow label="Net velocity/dev" value={String(summaryVelocityPerDeveloper)} />
+                </Stack>
+              </Paper>
 
-            <Paper withBorder radius="md" p="lg" className="sheet-summary-panel">
-              <Title order={3} size="h4">
-                Team members
-              </Title>
-              <Text size="sm" c="dimmed" mt={4}>
-                Member rows are local planning data for now; DevPortal can own this list later.
-              </Text>
-              <Table mt="md" verticalSpacing="xs" withTableBorder>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Name</Table.Th>
-                    <Table.Th>User id</Table.Th>
-                    <Table.Th>Upcoming OOO</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {leaveConfirmations.map((member, index) => (
-                    <Table.Tr key={`${member.slackUserId}-${index}`}>
-                      <Table.Td>
-                        <TextInput
-                          aria-label={`Team member ${index + 1} name`}
-                          value={member.teammateName}
-                          onChange={(event) => updateTeamMember(index, "teammateName", event.currentTarget.value)}
-                        />
-                      </Table.Td>
-                      <Table.Td>
-                        <TextInput
-                          aria-label={`Team member ${index + 1} user id`}
-                          value={member.slackUserId}
-                          onChange={(event) => updateTeamMember(index, "slackUserId", event.currentTarget.value)}
-                        />
-                      </Table.Td>
-                      <Table.Td>{member.upcomingSprintLeaveDays}</Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Paper>
-          </Stack>
-        </Grid.Col>
-      </Grid>
+              <Paper withBorder radius="md" p="lg">
+                <SectionHeading icon={Table2} title="Jira defaults" />
+                <SimpleGrid cols={{ base: 1 }} spacing="md" mt="md">
+                  <TextInput
+                    label="Team project name"
+                    value={form.jiraProjectName}
+                    onChange={(event) => updateText("jiraProjectName", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Jira cloud id"
+                    value={form.jiraCloudId}
+                    onChange={(event) => updateText("jiraCloudId", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Jira project id"
+                    value={form.jiraProjectId}
+                    onChange={(event) => updateText("jiraProjectId", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Jira project key"
+                    value={form.jiraProjectKey}
+                    onChange={(event) => updateText("jiraProjectKey", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Jira board"
+                    value={form.jiraBoardName}
+                    onChange={(event) => updateText("jiraBoardName", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Jira board id"
+                    value={form.jiraBoardId}
+                    onChange={(event) => updateText("jiraBoardId", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Jira sprint field"
+                    value={form.jiraSprintField}
+                    onChange={(event) => updateText("jiraSprintField", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Jira story points field"
+                    value={form.jiraStoryPointsField}
+                    onChange={(event) => updateText("jiraStoryPointsField", event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Done status category"
+                    value={form.jiraDoneStatusCategory}
+                    onChange={(event) => updateText("jiraDoneStatusCategory", event.currentTarget.value)}
+                  />
+                </SimpleGrid>
+              </Paper>
+            </Stack>
+          </Grid.Col>
+        </Grid>
+      </Stack>
     );
   }
 
@@ -1576,20 +1832,38 @@ export function SprintPlanningWorkflow() {
 
   function renderCoworkerPlaceholder(title: string, description: string) {
     return (
-      <Paper withBorder radius="md" p="xl">
-        <Group justify="space-between" align="flex-start" gap="md">
-          <Box>
+      <Paper withBorder radius="md" p={{ base: "xl", md: 48 }}>
+        <Stack gap="xl" align="center" ta="center">
+          <Box className="brand-mark">
+            <Sparkles size={24} aria-hidden="true" />
+          </Box>
+          <Stack gap="xs" maw={640}>
+            <Badge variant="light" color="teal" mx="auto">
+              Coming soon
+            </Badge>
             <Title order={1} size="h2">
-              {title}
+              {title} coworker
             </Title>
-            <Text c="dimmed" mt={4}>
+            <Text c="dimmed" size="lg">
+              Stay tuned and keep using AI Coworkers. This workspace is planned next after the Scrum Master flow gets
+              deeper Jira, team, and sprint intelligence.
+            </Text>
+            <Text c="dimmed" size="sm">
               {description}
             </Text>
-          </Box>
-          <Badge variant="light" color="gray">
-            Planned coworker
-          </Badge>
-        </Group>
+          </Stack>
+          <Group gap="xs" justify="center">
+            <Badge variant="outline" color="gray">
+              Workflow templates
+            </Badge>
+            <Badge variant="outline" color="gray">
+              Team context
+            </Badge>
+            <Badge variant="outline" color="gray">
+              Read-only connectors
+            </Badge>
+          </Group>
+        </Stack>
       </Paper>
     );
   }
@@ -1608,7 +1882,7 @@ export function SprintPlanningWorkflow() {
                   AI Coworkers
                 </Text>
                 <Text size="xs" c="dimmed" visibleFrom="sm">
-                  Scrum Master coworker
+                  Making your life smoother with AI on the go
                 </Text>
               </Box>
             </Group>
@@ -1638,8 +1912,8 @@ export function SprintPlanningWorkflow() {
                   <Menu.Item disabled>{form.teamName} · current team view</Menu.Item>
                   <Menu.Item disabled>Switch teams from DevPortal later</Menu.Item>
                   <Menu.Divider />
-                  <Menu.Item leftSection={<Settings2 size={15} />} onClick={() => setIsTeamProfileOpen(true)}>
-                    Team profile
+                  <Menu.Item leftSection={<Settings2 size={15} />} onClick={() => setViewMode("team-settings")}>
+                    Team settings
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
@@ -1649,7 +1923,11 @@ export function SprintPlanningWorkflow() {
       </AppShell.Header>
 
       <AppShell.Main className="planner-app">
-        {viewMode === "home" ? (
+        {viewMode === "team-settings" ? (
+          <Container size="xl" py="lg">
+            {renderTeamProfileContent()}
+          </Container>
+        ) : viewMode === "home" ? (
           <Container size="xl" py="xl">
             <Stack gap="lg">
               <Tabs value={coworkerTab} onChange={(value) => setCoworkerTab((value as CoworkerTab) ?? "scrum-master")}>
@@ -1976,15 +2254,6 @@ export function SprintPlanningWorkflow() {
           </Container>
         )}
       </AppShell.Main>
-
-      <Modal
-        opened={isTeamProfileOpen}
-        onClose={() => setIsTeamProfileOpen(false)}
-        title="Profile / Team"
-        size="xl"
-      >
-        {renderTeamProfileContent()}
-      </Modal>
 
       <Modal
         opened={isSessionBrowserOpen}

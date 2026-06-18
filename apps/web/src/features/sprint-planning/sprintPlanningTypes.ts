@@ -2,8 +2,14 @@ export type PlanningForm = {
   teamKey: string;
   teamName: string;
   jiraProjectName: string;
+  jiraCloudId: string;
+  jiraProjectId: string;
   jiraProjectKey: string;
   jiraBoardName: string;
+  jiraBoardId: string;
+  jiraSprintField: string;
+  jiraStoryPointsField: string;
+  jiraDoneStatusCategory: string;
   slackChannel: string;
   sprintNamingPattern: string;
   previousSprintName: string;
@@ -52,6 +58,14 @@ export type SprintPlanningInput = {
   confidenceAdjustment: number;
   manualVelocityOverride: number | null;
   velocityOverrideReason: string;
+};
+
+export type TeamMember = {
+  name: string;
+  externalUserId?: string;
+  slackUserId?: string;
+  role?: string;
+  active: boolean;
 };
 
 export type AutomationStep = {
@@ -105,11 +119,17 @@ export type DraftResponse = {
 export type TeamSprintPlanningConfig = {
   teamKey: string;
   teamName: string;
+  members: TeamMember[];
   jira: {
+    cloudId?: string;
     projectName?: string;
+    projectId?: string;
     projectKey: string;
     boardName: string;
     boardId?: string;
+    sprintField?: string;
+    storyPointsField?: string;
+    doneStatusCategory?: string;
   };
   slack: {
     channelName: string;
@@ -151,7 +171,7 @@ export type JiraReportingImportResponse = {
       sprintName: string;
       jiraSprintId: string;
       completedStoryPoints: number;
-      source: "mock-jira-report";
+      source: "mock-jira-report" | "jira_report";
     };
     formPatch: {
       previousVelocityMinus3: number;

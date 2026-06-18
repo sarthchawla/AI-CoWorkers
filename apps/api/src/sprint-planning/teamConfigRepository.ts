@@ -20,6 +20,27 @@ function getMockTeamConfig(teamKey: string) {
   );
 }
 
+function mergeWithDefaultConfig(config: TeamSprintPlanningConfigInput, teamKey: string) {
+  const defaultConfig = getMockTeamConfig(teamKey);
+
+  return {
+    ...defaultConfig,
+    ...config,
+    jira: {
+      ...defaultConfig.jira,
+      ...config.jira
+    },
+    slack: {
+      ...defaultConfig.slack,
+      ...config.slack
+    },
+    defaults: {
+      ...defaultConfig.defaults,
+      ...config.defaults
+    }
+  };
+}
+
 async function readStore(): Promise<TeamConfigStore> {
   try {
     const content = await readFile(storePath, "utf8");
@@ -40,7 +61,9 @@ async function writeStore(store: TeamConfigStore) {
 
 export async function getTeamSprintPlanningConfig(teamKey: string) {
   const store = await readStore();
-  return store.teamConfigs.find((config) => config.teamKey === teamKey) ?? getMockTeamConfig(teamKey);
+  const savedConfig = store.teamConfigs.find((config) => config.teamKey === teamKey);
+
+  return savedConfig ? mergeWithDefaultConfig(savedConfig, teamKey) : getMockTeamConfig(teamKey);
 }
 
 export async function saveTeamSprintPlanningConfig(input: TeamSprintPlanningConfigInput) {

@@ -2,10 +2,53 @@ export const mockTeamSprintPlanningConfigs = {
   pta: {
     teamKey: "pta",
     teamName: "PTA",
+    members: [
+      {
+        name: "Anika",
+        externalUserId: "anika",
+        slackUserId: "U-ANIKA",
+        role: "Engineer",
+        active: true
+      },
+      {
+        name: "Dev",
+        externalUserId: "dev",
+        slackUserId: "U-DEV",
+        role: "Engineer",
+        active: true
+      },
+      {
+        name: "Mei",
+        externalUserId: "mei",
+        slackUserId: "U-MEI",
+        role: "Engineer",
+        active: true
+      },
+      {
+        name: "Ravi",
+        externalUserId: "ravi",
+        slackUserId: "U-RAVI",
+        role: "Engineer",
+        active: true
+      },
+      {
+        name: "Sara",
+        externalUserId: "sara",
+        slackUserId: "U-SARA",
+        role: "Engineer",
+        active: true
+      }
+    ],
     jira: {
-      projectName: "PTA",
+      cloudId: "681413ed-e457-48de-8251-e5aa1222e0e2",
+      projectName: "PTA Trip planner Agent",
+      projectId: "14791",
       projectKey: "PTATPA",
-      boardName: "PTA Sprint Board"
+      boardName: "PTA Sprint Board",
+      boardId: "10357",
+      sprintField: "customfield_10020",
+      storyPointsField: "customfield_10024",
+      doneStatusCategory: "done"
     },
     slack: {
       channelName: "#pta-sprint-planning"

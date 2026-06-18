@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getSprintPlanningConnectorMode } from "../connectors/connectorEnvironment.js";
 import type { SprintPlanningSessionCloneInput, SprintPlanningSessionSaveInput } from "./schema.js";
 import {
   calculateSprintPlanning,
@@ -24,7 +25,7 @@ export type SprintPlanningConnectorActionKey = "fetch-closed-story-points";
 export type SprintPlanningConnectorActionResult = {
   actionKey: SprintPlanningConnectorActionKey;
   connector: "jira";
-  mode: "mock";
+  mode: "mock" | "jira";
   status: "done";
   ranAt: string;
   output: Record<string, unknown>;
@@ -55,7 +56,7 @@ async function writeStore(store: SprintPlanningSessionStore) {
 
 async function updateSession(
   sessionId: string,
-  update: (session: SprintPlanningSession, now: string) => SprintPlanningSession
+  update: (session: SprintPlanningSession, now: string) => Promise<SprintPlanningSession> | SprintPlanningSession
 ) {
   const store = await readStore();
   const now = new Date().toISOString();
@@ -65,7 +66,7 @@ async function updateSession(
     return null;
   }
 
-  const nextSession = update(existingSession, now);
+  const nextSession = await update(existingSession, now);
 
   store.sessions = store.sessions.map((session) => (session.sessionId === sessionId ? nextSession : session));
   await writeStore(store);
@@ -330,9 +331,9 @@ export async function runSprintPlanningConnectorAction(
   actionKey: SprintPlanningConnectorActionKey
 ) {
   let actionResult: SprintPlanningConnectorActionResult | null = null;
-  const session = await updateSession(sessionId, (currentSession, now) => {
+  const session = await updateSession(sessionId, async (currentSession, now) => {
     if (actionKey === "fetch-closed-story-points") {
-      const preview = createJiraReportingImportPreview({
+      const preview = await createJiraReportingImportPreview({
         teamKey: currentSession.input.teamKey,
         jiraProjectKey: currentSession.input.jiraProjectKey,
         jiraBoardName: currentSession.input.jiraBoardName,
@@ -350,7 +351,7 @@ export async function runSprintPlanningConnectorAction(
       actionResult = {
         actionKey,
         connector: "jira",
-        mode: "mock",
+        mode: getSprintPlanningConnectorMode(),
         status: "done",
         ranAt: now,
         output: {
