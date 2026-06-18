@@ -2,7 +2,6 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import {
   jiraReportingImportSchema,
-  slackLeaveConfirmationImportSchema,
   sprintPlanningSchema,
   sprintPlanningSessionCloneSchema,
   sprintPlanningSessionSaveSchema,
@@ -17,8 +16,7 @@ import {
 } from "./sessionRepository.js";
 import {
   calculateSprintPlanning,
-  createJiraReportingImportPreview,
-  createSlackLeaveConfirmationImportPreview
+  createJiraReportingImportPreview
 } from "./service.js";
 import { getTeamSprintPlanningConfig, saveTeamSprintPlanningConfig } from "./teamConfigRepository.js";
 
@@ -155,14 +153,11 @@ sprintPlanningRouter.post(
     const sessionId = String(request.params.sessionId);
     const actionKey = request.params.actionKey;
 
-    if (
-      actionKey !== "collect-leaves" &&
-      actionKey !== "fetch-closed-story-points"
-    ) {
+    if (actionKey !== "fetch-closed-story-points") {
       response.status(400).json({
         status: "error",
         message: "Unsupported sprint planning connector action",
-        supportedActions: ["collect-leaves", "fetch-closed-story-points"]
+        supportedActions: ["fetch-closed-story-points"]
       });
       return;
     }
@@ -203,24 +198,6 @@ sprintPlanningRouter.post("/jira-reporting/import-preview", (request, response) 
   response.json({
     status: "success",
     data: createJiraReportingImportPreview(parsedInput.data)
-  });
-});
-
-sprintPlanningRouter.post("/slack/leave-confirmations/import-preview", (request, response) => {
-  const parsedInput = slackLeaveConfirmationImportSchema.safeParse(request.body);
-
-  if (!parsedInput.success) {
-    response.status(400).json({
-      status: "error",
-      message: "Invalid Slack leave confirmation import input",
-      errors: parsedInput.error.flatten()
-    });
-    return;
-  }
-
-  response.json({
-    status: "success",
-    data: createSlackLeaveConfirmationImportPreview(parsedInput.data)
   });
 });
 

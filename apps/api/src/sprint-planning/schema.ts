@@ -111,13 +111,3 @@ export const jiraReportingImportSchema = z.object({
 });
 
 export type JiraReportingImportInput = z.infer<typeof jiraReportingImportSchema>;
-
-export const slackLeaveConfirmationImportSchema = z.object({
-  teamKey: z.string().optional(),
-  slackChannel: z.string().min(1),
-  previousSprintName: z.string().min(1),
-  currentSprintName: z.string().min(1),
-  requestMessage: z.string().min(1).optional()
-});
-
-export type SlackLeaveConfirmationImportInput = z.infer<typeof slackLeaveConfirmationImportSchema>;

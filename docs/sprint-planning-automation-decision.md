@@ -14,8 +14,8 @@ These items should be implemented as normal product workflows, connector actions
 | Calculate working days excluding weekends and configured holidays | Calendar calculation with configured holiday source. | High |
 | Import Jira velocity history | Connector/API retrieval and mapping. | High |
 | Pull net velocity from Jira reports | Connector/API retrieval and mapping from completed story points, leave, and closed-sprint context. | High |
-| Close previous Jira sprint | Connector/API action with confirmation and audit trail. | Medium |
-| Import Slack leave confirmations from structured replies/forms | Reliable when Slack input is structured. | Medium |
+| Confirm previous Jira sprint was closed | Manual checkpoint with a Jira link before read-only reporting import. | High |
+| Edit leave confirmations from manual team replies | Product workflow with editable rows and totals. | High |
 | Sum leave days and recalculate capacity | Numeric aggregation. | High |
 | Calculate average net velocity | Numeric formula from prior sprint rows. | High |
 | Calculate capacity-adjusted velocity | Numeric formula from capacity and leave data. | High |
@@ -44,7 +44,7 @@ These items need interpretation, summarization, judgment, ambiguity handling, or
 
 The workflow engine should be deterministic:
 
-- Connector actions retrieve and write data.
+- Connector actions retrieve data only.
 - Calculations stay formula-based and auditable.
 - Every imported or calculated value remains editable.
 - Saved sessions preserve auditability and allow users to resume planning.

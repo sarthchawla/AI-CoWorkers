@@ -32,7 +32,7 @@ export type WorkflowStepDefinition = {
   title: string;
   description: string;
   primaryAction: string;
-  connector?: "jira" | "slack";
+  connector?: "jira";
 };
 
 const statusLabels: Record<AutomationStep["status"], string> = {
@@ -44,15 +44,15 @@ const statusLabels: Record<AutomationStep["status"], string> = {
 };
 
 function statusColor(status: string) {
-  if (status === "published" || status === "finalized" || status === "done") {
+  if (status === "done") {
     return "teal";
   }
 
-  if (status === "ready_for_review" || status === "ready") {
+  if (status === "ready") {
     return "blue";
   }
 
-  if (status === "connector-pending" || status === "pending") {
+  if (status === "connector-pending") {
     return "yellow";
   }
 
@@ -100,14 +100,6 @@ export function SectionHeading({
   );
 }
 
-export function PlanningStatusBadge({ status }: { status: string }) {
-  return (
-    <Badge color={statusColor(status)} variant="light" tt="capitalize">
-      {status.replaceAll("_", " ")}
-    </Badge>
-  );
-}
-
 export function SourceBadge({ source }: { source: VelocityHistoryRow["source"] | LeaveConfirmationRow["source"] }) {
   const label =
     source === "mock-jira-report"
@@ -115,9 +107,9 @@ export function SourceBadge({ source }: { source: VelocityHistoryRow["source"] |
       : source === "jira_report"
         ? "Real Jira"
         : source === "mock-slack-thread"
-          ? "Slack preview"
+          ? "Legacy leave preview"
           : source === "slack_thread"
-            ? "Real Slack"
+            ? "Leave import"
             : "Manual";
 
   return (
@@ -169,7 +161,9 @@ export function SprintPlanCard({
       <Group justify="space-between" align="flex-start" gap="md" wrap="nowrap">
         <Box>
           <Group gap="xs" mb={8}>
-            <PlanningStatusBadge status={session.planningStatus} />
+            <Badge color="teal" variant="light">
+              Sprint plan
+            </Badge>
             <Text size="sm" c="dimmed">
               {session.currentSprintDates.start} to {session.currentSprintDates.end}
             </Text>
@@ -183,7 +177,7 @@ export function SprintPlanCard({
         </Box>
         <Group gap="xs" visibleFrom="sm">
           <Button variant="default" leftSection={<FolderOpen size={16} />} onClick={onOpen}>
-            {session.planningStatus === "published" || session.planningStatus === "finalized" ? "Review" : "Continue"}
+            Open
           </Button>
           <Button variant="light" leftSection={<Copy size={16} />} onClick={onClone}>
             Clone
@@ -217,7 +211,7 @@ export function SprintPlanCard({
 
       <Group gap="xs" mt="md" hiddenFrom="sm">
         <Button variant="default" leftSection={<FolderOpen size={16} />} onClick={onOpen} fullWidth>
-          {session.planningStatus === "published" || session.planningStatus === "finalized" ? "Review" : "Continue"}
+          Open
         </Button>
         <Button variant="light" leftSection={<Copy size={16} />} onClick={onClone} fullWidth>
           Clone
@@ -394,7 +388,7 @@ export function LeaveConfirmationEditor({
         </Table>
       </ScrollArea>
       <Text size="sm" c="dimmed">
-        Table totals update the previous and upcoming leave days used in capacity and Slack previews.
+        Table totals update the previous and upcoming leave days used in capacity and the leave request draft.
       </Text>
     </Stack>
   );
@@ -451,7 +445,7 @@ export function WorkflowSummary({
         </Stack>
       </Paper>
       <Paper withBorder radius="md" p="md">
-        <SectionHeading icon={MessageSquare} title="Slack preview" />
+        <SectionHeading icon={MessageSquare} title="Leave request draft" />
         <Text component="pre" className="preview-block" mt="md">
           {slackPreview}
         </Text>

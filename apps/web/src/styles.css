@@ -78,6 +78,14 @@ pre {
   line-height: 1.5;
 }
 
+.sheet-summary-panel {
+  overflow-x: auto;
+}
+
+.sheet-summary-panel table {
+  min-width: 560px;
+}
+
 @media (max-width: 48em) {
   .stepper-panel,
   .workflow-summary {

@@ -4,8 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { SprintPlanningSessionCloneInput, SprintPlanningSessionSaveInput } from "./schema.js";
 import {
   calculateSprintPlanning,
-  createJiraReportingImportPreview,
-  createSlackLeaveConfirmationImportPreview
+  createJiraReportingImportPreview
 } from "./service.js";
 
 const currentFile = fileURLToPath(import.meta.url);
@@ -20,13 +19,11 @@ export type SprintPlanningSession = SprintPlanningSessionSaveInput & {
   connectorActions?: SprintPlanningConnectorActionResult[];
 };
 
-export type SprintPlanningConnectorActionKey =
-  | "collect-leaves"
-  | "fetch-closed-story-points";
+export type SprintPlanningConnectorActionKey = "fetch-closed-story-points";
 
 export type SprintPlanningConnectorActionResult = {
   actionKey: SprintPlanningConnectorActionKey;
-  connector: "jira" | "slack";
+  connector: "jira";
   mode: "mock";
   status: "done";
   ranAt: string;
@@ -334,43 +331,6 @@ export async function runSprintPlanningConnectorAction(
 ) {
   let actionResult: SprintPlanningConnectorActionResult | null = null;
   const session = await updateSession(sessionId, (currentSession, now) => {
-    if (actionKey === "collect-leaves") {
-      const preview = createSlackLeaveConfirmationImportPreview({
-        teamKey: currentSession.input.teamKey,
-        slackChannel: currentSession.input.slackChannel,
-        previousSprintName: currentSession.input.previousSprintName,
-        currentSprintName: currentSession.input.currentSprintName
-      });
-      const confirmations = preview.confirmations.map((confirmation) => ({
-        ...confirmation
-      })) as SprintPlanningSession["leaveConfirmations"];
-
-      actionResult = {
-        actionKey,
-        connector: "slack",
-        mode: "mock",
-        status: "done",
-        ranAt: now,
-        output: {
-          requestPreview: preview.requestPreview,
-          thread: preview.thread,
-          confirmations
-        },
-        warnings: preview.warnings
-      };
-
-      return {
-        ...currentSession,
-        input: {
-          ...currentSession.input,
-          ...preview.formPatch
-        },
-        leaveConfirmations: confirmations,
-        connectorActions: upsertActionResult(currentSession.connectorActions, actionResult),
-        updatedAt: now
-      };
-    }
-
     if (actionKey === "fetch-closed-story-points") {
       const preview = createJiraReportingImportPreview({
         teamKey: currentSession.input.teamKey,

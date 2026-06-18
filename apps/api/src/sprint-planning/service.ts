@@ -1,9 +1,8 @@
-import type { JiraReportingImportInput, SlackLeaveConfirmationImportInput, SprintPlanningInput } from "./schema.js";
+import type { JiraReportingImportInput, SprintPlanningInput } from "./schema.js";
 import { getSprintPlanningConnectorModeLabel } from "../connectors/connectorEnvironment.js";
 import {
   mockJiraSprintIds,
-  mockJiraVelocityHistory,
-  mockSlackLeaveConfirmations
+  mockJiraVelocityHistory
 } from "../connectors/mockSprintPlanningData.js";
 
 function withJiraSprintId(row: (typeof mockJiraVelocityHistory)[number]) {
@@ -37,45 +36,6 @@ export function createJiraReportingImportPreview(input: JiraReportingImportInput
     warnings: [
       `Using ${getSprintPlanningConnectorModeLabel()} Jira reporting data until Jira API or MCP connector is configured.`,
       `Previous sprint requested: ${input.previousSprintName}`
-    ]
-  };
-}
-
-export function createSlackLeaveConfirmationImportPreview(input: SlackLeaveConfirmationImportInput) {
-  const previousSprintLeaveDays = mockSlackLeaveConfirmations.reduce(
-    (sum, row) => sum + row.previousSprintLeaveDays,
-    0
-  );
-  const upcomingSprintLeaveDays = mockSlackLeaveConfirmations.reduce(
-    (sum, row) => sum + row.upcomingSprintLeaveDays,
-    0
-  );
-  const requestPreview =
-    input.requestMessage?.trim() ||
-    [
-      `Hi team, please confirm leave updates for ${input.previousSprintName} and ${input.currentSprintName}.`,
-      "Reply with previous sprint leave corrections and upcoming sprint leave days.",
-      "The Scrum Master will review the collected values before finalizing sprint net velocity per developer."
-    ].join("\n");
-
-  return {
-    channelName: input.slackChannel,
-    importedAt: new Date().toISOString(),
-    requestPreview,
-    thread: {
-      channelName: input.slackChannel,
-      threadTs: `mock-thread-${input.previousSprintName.toLowerCase().replaceAll(" ", "-")}`,
-      readStrategy:
-        "Read replies from the leave request thread, map Slack user ids to teammates, parse previous/upcoming leave days, and keep unresolved replies as pending."
-    },
-    confirmations: mockSlackLeaveConfirmations,
-    formPatch: {
-      previousSprintLeaveDays,
-      upcomingSprintLeaveDays
-    },
-    warnings: [
-      `Using ${getSprintPlanningConnectorModeLabel()} Slack thread data until Slack API or MCP connector is configured.`,
-      `Slack channel requested: ${input.slackChannel}`
     ]
   };
 }
@@ -153,9 +113,9 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
         label: `Carry ${input.daysInSprintExcludingHolidays} working days and ${input.holidayCount} holidays`
       },
       {
-        id: "collect-leaves",
-        status: "connector-pending",
-        label: `Send leave confirmation request to ${input.slackChannel}`
+        id: "manual-leave-updates",
+        status: "team-input",
+        label: `Manually collect leave updates using ${input.slackChannel}`
       },
       {
         id: "close-previous-sprint",
@@ -180,9 +140,9 @@ export function calculateSprintPlanning(input: SprintPlanningInput) {
         label: `Create ${input.currentSprintName} from ${input.previousSprintName} planning context`
       },
       {
-        id: "collect-leaves",
-        status: "connector-pending",
-        label: `Ask ${input.slackChannel} to confirm previous and upcoming sprint leaves`
+        id: "manual-leave-updates",
+        status: "team-input",
+        label: `Prepare a leave request for ${input.slackChannel} and update rows manually`
       },
       {
         id: "close-previous-sprint",

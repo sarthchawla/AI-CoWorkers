@@ -41,18 +41,17 @@ Current manual flow:
 6. Pull completed story points from Jira reporting.
 7. Calculate average net velocity and let the team override it when confidence or spillover context supports a higher target.
 
-The web app now starts with a Sprint Planning workbench for these inputs and outputs. Jira and Slack are represented as configurable team inputs today, with connector-backed automation planned next.
+The web app now starts with a Sprint Planning workbench for these inputs and outputs. Jira is represented as a read-only reporting input today, while Slack remains a manual channel reference for leave coordination.
 
 ## Mock Connector Environment
 
-Set `SPRINT_PLANNING_CONNECTOR_MODE=mock` to run Sprint Planning without real Jira or Slack access. In mock mode, the API uses fixture data for:
+Set `SPRINT_PLANNING_CONNECTOR_MODE=mock` to run Sprint Planning without real Jira access. In mock mode, the API uses fixture data for:
 
 - Jira sprint IDs, closed story points, and the last three sprint velocities.
-- Slack leave-confirmation responses, including confirmed, pending, and Scrum Master-adjusted rows.
-- Saved-session connector actions for closing the previous sprint, fetching story points, and collecting leave updates.
+- Saved-session connector actions for fetching read-only Jira story point and net velocity history.
 - Team-level Jira project, Jira board, Slack channel, and default capacity settings persisted in `SPRINT_PLANNING_TEAM_CONFIG_FILE`.
 
-This keeps the web workflow testable while Jira API/MCP and Slack API/MCP adapters are still pending.
+This keeps the web workflow testable while Jira API/MCP adapters are still pending. Slack is intentionally manual for now: the app can draft a message, but it does not send to Slack or read Slack threads.
 
 Current preview APIs:
 
@@ -64,7 +63,6 @@ Current preview APIs:
 - `POST /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId/clone`
 - `POST /api/coworkers/scrum-master/sprint-planning/sessions/:sessionId/connector-actions/:actionKey/run`
 - `POST /api/coworkers/scrum-master/sprint-planning/jira-reporting/import-preview`
-- `POST /api/coworkers/scrum-master/sprint-planning/slack/leave-confirmations/import-preview`
 - `POST /api/coworkers/scrum-master/sprint-planning/workflow-draft`
 
 ## Product Direction
@@ -100,4 +98,4 @@ The web app runs on `http://localhost:5173` and the API runs on `http://localhos
 
 ## Current Status
 
-The repo contains the first sprint-planning workflow slice: a React workbench, a TypeScript API route, sprint velocity calculation, saved planning sessions, configurable team Jira/Slack defaults, connector-ready action plan, mock connector fixtures, and a Postgres schema design for durable planning sessions.
+The repo contains the first sprint-planning workflow slice: a React workbench, a TypeScript API route, sprint velocity calculation, saved planning sessions, configurable team Jira/Slack defaults, read-only Jira connector previews, and a Postgres schema design for durable planning sessions.

@@ -21,7 +21,7 @@ This longer demo is meant for manager sharing. It explains the flow slowly with 
 6. Clone previous sprint context.
 7. Review calendar details and working days.
 8. Review the last three sprint net velocity rows.
-9. Import mock Slack leave updates.
+9. Edit the manual leave request and update leave rows without running a Slack connector.
 10. Save before connector actions to create an audit point.
 11. Run mock Jira sprint close.
 12. Pull mock Jira net velocity.

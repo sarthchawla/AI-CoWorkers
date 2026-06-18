@@ -171,26 +171,6 @@ export type LeaveConfirmationRow = {
   source: "manual" | "mock-slack-thread" | "slack_thread";
 };
 
-export type SlackLeaveConfirmationImportResponse = {
-  status: string;
-  data: {
-    channelName: string;
-    importedAt: string;
-    requestPreview: string;
-    thread: {
-      channelName: string;
-      threadTs: string;
-      readStrategy: string;
-    };
-    confirmations: LeaveConfirmationRow[];
-    formPatch: {
-      previousSprintLeaveDays: number;
-      upcomingSprintLeaveDays: number;
-    };
-    warnings: string[];
-  };
-};
-
 export type PlanningResult = {
   averageNetVelocity: number;
   averageNetVelocityPerDeveloper: number;
@@ -220,13 +200,11 @@ export type WorkflowStepId =
 
 export type WorkflowStepState = "current" | "completed" | "available" | "locked";
 
-export type SprintPlanningConnectorActionKey =
-  | "collect-leaves"
-  | "fetch-closed-story-points";
+export type SprintPlanningConnectorActionKey = "fetch-closed-story-points";
 
 export type SprintPlanningConnectorActionResult = {
   actionKey: SprintPlanningConnectorActionKey;
-  connector: "jira" | "slack";
+  connector: "jira";
   mode: "mock";
   status: "done";
   ranAt: string;

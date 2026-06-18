@@ -21,7 +21,7 @@ Show how the AI Scrum Master coworker turns the current manual Excel, Jira, and 
    - holiday count
    - team size
 6. Review the net velocity baseline from the last three sprints.
-7. Import mock Slack leave updates and show that teammate rows remain editable.
+7. Edit the manual leave request and show that teammate leave rows remain editable.
 8. Save the session before running mock connector actions.
 9. Run mock Jira close and mock Jira story-point reporting.
 10. Set average net velocity per developer instead of overriding total velocity.
@@ -37,5 +37,5 @@ The first product slice uses deterministic automation for workflow, connector st
 
 - Jira and Slack are mocked.
 - Connector actions update the saved local sprint-planning session only.
-- The workflow is designed so real Jira/Slack adapters can replace mock connectors later.
+- The workflow is designed so a real read-only Jira adapter can replace mock Jira reporting later. Slack remains manual until we explicitly choose to add a connector.
 - Scrum Master retains final authority because all imported and calculated values are editable.
